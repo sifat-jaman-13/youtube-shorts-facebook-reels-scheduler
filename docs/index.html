@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#08111f">
+<meta name="description" content="ScarClipScheduler is a Windows desktop app for organizing, editing and scheduling YouTube Shorts and Facebook Page Reels.">
+<meta property="og:title" content="ScarClipScheduler — Publish your clips with a plan">
+<meta property="og:description" content="Review clips, edit post copy and schedule from one Windows desktop queue.">
+<meta property="og:image" content="https://raw.githubusercontent.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/main/assets/scarclipscheduler-banner.svg">
+<title>ScarClipScheduler — Publish your clips with a plan</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root{color-scheme:dark;--bg:#08111f;--panel:#101e31;--panel2:#142840;--fg:#f4f8fc;--muted:#a8b8cb;--line:rgba(179,204,228,.15);--teal:#58e0c0;--blue:#83c8ff;--max:1120px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse at 85% 0%,rgba(29,113,130,.2),transparent 32rem),radial-gradient(ellipse at 5% 20%,rgba(53,100,174,.14),transparent 34rem),var(--bg);color:var(--fg);font:16px/1.65 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:inherit;text-decoration:none}a:focus-visible,summary:focus-visible{outline:3px solid var(--teal);outline-offset:4px}.wrap{width:min(var(--max),calc(100% - 44px));margin:auto}
+header{position:sticky;top:0;z-index:5;background:rgba(8,17,31,.85);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+nav{min-height:72px;display:flex;align-items:center;justify-content:space-between;gap:22px}.brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-.03em}.mark{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,var(--teal),var(--blue));color:#06131d;font-weight:950}
+.links{display:flex;align-items:center;gap:24px;color:var(--muted);font-size:14px}.links a:hover,.footlinks a:hover{color:var(--fg)}.links .navcta{padding:9px 14px;border-radius:9px;background:var(--teal);color:#07151e;font-weight:800}
+.hero{padding:90px 0 68px}.hero-grid{display:grid;grid-template-columns:1.08fr .92fr;align-items:center;gap:56px}
+.pill{display:inline-flex;gap:9px;align-items:center;padding:6px 11px;border:1px solid rgba(88,224,192,.25);border-radius:999px;background:rgba(88,224,192,.07);color:#a8f2df;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 12px var(--teal)}
+h1{margin:20px 0 18px;font-size:clamp(42px,6.2vw,70px);line-height:1.04;letter-spacing:-.065em}.gradient{color:var(--teal)}.lead{max-width:610px;color:var(--muted);font-size:18px;line-height:1.7}
+.actions{display:flex;flex-wrap:wrap;gap:13px;margin-top:29px}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:49px;padding:0 18px;border-radius:11px;font-weight:800;transition:transform .18s}.btn:hover{transform:translateY(-2px)}.primary{color:#07151e;background:var(--teal);box-shadow:0 12px 34px rgba(88,224,192,.15)}.secondary{border:1px solid var(--line);background:rgba(255,255,255,.035)}.fine{margin-top:15px;color:#8195ad;font-size:12px}.trust{display:flex;flex-wrap:wrap;gap:12px 25px;margin-top:22px;color:#8297ae;font-size:12px}.trust b{color:#d4e1ed}
+.preview{position:relative;padding:13px;border:1px solid rgba(132,178,212,.22);border-radius:22px;background:linear-gradient(145deg,#182b41,#0a1625);box-shadow:0 35px 90px rgba(0,0,0,.35),0 0 70px rgba(46,151,154,.1);transform:perspective(1000px) rotateY(-5deg) rotateX(2deg)}
+.window{overflow:hidden;border:1px solid rgba(210,230,246,.12);border-radius:13px;background:#0b1524}.wbar{height:38px;display:flex;align-items:center;gap:6px;padding:0 12px;border-bottom:1px solid var(--line);color:#8397ae;font-size:10px}.wbar i{width:7px;height:7px;border-radius:50%;background:#567086}.wbar span{margin-left:auto}
+.mock{padding:17px}.mockhead{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px;font-size:13px;font-weight:800}.tag{padding:4px 8px;border-radius:6px;background:rgba(88,224,192,.14);color:var(--teal);font-size:9px}
+.clip{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:10px;margin-top:8px;padding:11px 9px;border:1px solid rgba(190,214,238,.09);border-radius:9px;background:rgba(255,255,255,.025)}.clip.sel{border-color:rgba(88,224,192,.45);background:rgba(88,224,192,.07)}.check{width:15px;height:15px;border:1px solid #60758e;border-radius:4px}.sel .check{display:grid;place-items:center;border-color:var(--teal);background:var(--teal);color:#07151e;font-size:11px}.fname{font-size:10px;font-weight:800}.sub{color:#8498b0;font-size:9px}.state{color:var(--teal);font-size:9px}.mockfoot{display:flex;align-items:center;gap:10px;margin-top:15px;color:#8ea4bb;font-size:9px}.bar{height:4px;flex:1;border-radius:99px;background:#233b53;overflow:hidden}.bar b{display:block;width:68%;height:100%;background:linear-gradient(90deg,var(--teal),var(--blue))}.float{position:absolute;right:-18px;bottom:23px;padding:11px 14px;border:1px solid rgba(88,224,192,.25);border-radius:12px;background:#10283a;box-shadow:0 14px 40px #0005;color:#baf7e8;font-size:11px;font-weight:800}
+section{padding:70px 0;border-top:1px solid var(--line)}.head{max-width:680px;margin-bottom:31px}.kicker{color:var(--teal);font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}h2{margin:10px 0 12px;font-size:clamp(30px,4vw,43px);line-height:1.13;letter-spacing:-.045em}.head p{margin:0;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.card{padding:22px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(155deg,rgba(20,36,58,.85),rgba(13,25,42,.72))}.ico{width:39px;height:39px;display:grid;place-items:center;border:1px solid rgba(88,224,192,.2);border-radius:11px;background:rgba(88,224,192,.08);color:var(--teal);font-size:18px}.card h3{margin:15px 0 7px;font-size:17px}.card p{margin:0;color:var(--muted);font-size:14px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;counter-reset:s}.step{position:relative;padding-left:53px}.step:before{counter-increment:s;content:"0" counter(s);position:absolute;left:0;top:0;color:var(--teal);font-size:22px;font-weight:900}.step h3{margin:0 0 7px;font-size:16px}.step p{margin:0;color:var(--muted);font-size:14px}
+.setup{display:grid;grid-template-columns:1fr 1fr;gap:16px}.setup article{padding:24px;border:1px solid var(--line);border-radius:16px;background:rgba(16,28,46,.75)}.setup h3{margin:0 0 8px;font-size:18px}.setup p,.setup li{color:var(--muted);font-size:14px}.setup ul{padding-left:19px}.note{margin-top:17px;padding:14px 16px;border-left:3px solid var(--teal);border-radius:0 10px 10px 0;background:rgba(88,224,192,.06);color:#bad1df;font-size:13px}
+.download{display:flex;align-items:center;justify-content:space-between;gap:25px;padding:32px;border:1px solid rgba(88,224,192,.24);border-radius:19px;background:radial-gradient(ellipse at 90% 0%,rgba(88,224,192,.13),transparent 50%),#102238}.download p{max-width:650px;margin:8px 0 0;color:var(--muted);font-size:14px}
+.faq{display:grid;grid-template-columns:1fr 1fr;gap:13px}details{padding:17px 19px;border:1px solid var(--line);border-radius:12px;background:rgba(16,28,46,.55)}summary{cursor:pointer;font-weight:750;font-size:14px}details p{margin:11px 0 0;color:var(--muted);font-size:13px}
+footer{padding:28px 0 40px;border-top:1px solid var(--line);color:#8498ae;font-size:12px}.foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px}.footlinks{display:flex;flex-wrap:wrap;gap:18px}
+@media(max-width:850px){.hero-grid{grid-template-columns:1fr;gap:40px}.preview{max-width:620px;margin:auto;transform:none}.cards{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr;gap:25px}}
+@media(max-width:620px){.wrap{width:calc(100% - 30px)}nav{min-height:64px}.links a:not(.navcta){display:none}.hero{padding:62px 0 50px}.lead{font-size:16px}section{padding:53px 0}.cards,.setup,.faq{grid-template-columns:1fr}.download{align-items:flex-start;flex-direction:column;padding:24px}.float{right:7px;bottom:-16px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><nav>
+<a class="brand" href="#"><span class="mark" aria-hidden="true">SC</span><span>ScarClipScheduler</span></a>
+<div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#setup">Setup</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">GitHub</a><a class="navcta" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler.exe">Download v1.2.0 ↗</a></div>
+</nav></div></header>
+<main>
+<div class="wrap hero"><div class="hero-grid">
+<div>
+<div class="pill"><span class="dot"></span> Windows desktop app · v1.2.0</div>
+<h1>Publish your clips <span class="gradient">with a plan.</span></h1>
+<p class="lead">Bring your short-form video queue into one place. Review each clip, edit its post copy, choose what to publish, and schedule to YouTube Shorts and Facebook Pages.</p>
+<div class="actions"><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler.exe">↓ Download for Windows</a><a class="btn secondary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Explore the project ↗</a></div>
+<p class="fine">Free and open source · Windows EXE bootstrapper · Platform credentials required</p>
+<div class="trust"><span>✓ <b>Selective scheduling</b></span><span>✓ <b>Per-clip copy editing</b></span><span>✓ <b>Queue tracking</b></span></div>
+</div>
+<div class="preview" aria-label="Illustrative video queue preview"><div class="window"><div class="wbar"><i></i><i></i><i></i><span>SCARCLIPSCHEDULER · QUEUE</span></div>
+<div class="mock"><div class="mockhead"><span>Detected clips</span><span class="tag">＋ Add videos</span></div>
+<div class="clip sel"><span class="check">✓</span><span><span class="fname">clip_01_hotwire.mp4</span><br><span class="sub">Title and description ready to edit</span></span><span class="state">Selected</span></div>
+<div class="clip"><span class="check"></span><span><span class="fname">clip_02_race.mp4</span><br><span class="sub">Review post copy before scheduling</span></span><span class="sub">Queued</span></div>
+<div class="clip sel"><span class="check">✓</span><span><span class="fname">clip_03_reaction.mp4</span><br><span class="sub">Ready for selected-clip scheduling</span></span><span class="state">Selected</span></div>
+<div class="mockfoot"><span>2 clips selected</span><span class="bar"><b></b></span><span>2 / 3</span></div></div></div><div class="float">One queue. Your publishing plan.</div></div>
+</div></div>
+<section id="features"><div class="wrap"><div class="head"><div class="kicker">Made for creator workflows</div><h2>Your clips. Your copy. Your schedule.</h2><p>Keep the final review and scheduling steps organized without losing track of which videos are ready to publish.</p></div>
+<div class="cards">
+<article class="card"><div class="ico">▤</div><h3>One clear video queue</h3><p>Review detected videos and their publishing status in a single desktop interface.</p></article>
+<article class="card"><div class="ico">☑</div><h3>Schedule what you select</h3><p>Choose one clip or use Ctrl/Shift selection for multiple clips. With no selection, the app uses the full queue.</p></article>
+<article class="card"><div class="ico">✎</div><h3>Edit every clip's copy</h3><p>Open a video to edit its title and description before scheduling.</p></article>
+<article class="card"><div class="ico">↗</div><h3>YouTube + Facebook Pages</h3><p>Connect platform credentials and manage supported publishing destinations from the app.</p></article>
+<article class="card"><div class="ico">◷</div><h3>Scheduling visibility</h3><p>See queue status and keep track of scheduled jobs and publication verification.</p></article>
+<article class="card"><div class="ico">⌫</div><h3>Remove without deleting media</h3><p>Remove selected entries from the app's queue. This does not erase original MP4 or TXT files.</p></article>
+</div></div></section>
+<section id="workflow"><div class="wrap"><div class="head"><div class="kicker">Simple workflow</div><h2>From detected clip to scheduled post.</h2><p>Keep control of the last mile before your content goes live.</p></div>
+<div class="steps"><article class="step"><h3>Load and review</h3><p>Bring video clips into the queue and check each detected item.</p></article><article class="step"><h3>Choose and personalize</h3><p>Select one or more clips, then edit titles and descriptions for those videos.</p></article><article class="step"><h3>Connect and schedule</h3><p>Set up YouTube and Meta credentials, choose publishing destinations, and schedule your selection.</p></article></div></div></section>
+<section id="setup"><div class="wrap"><div class="head"><div class="kicker">Getting started</div><h2>Set up once. Then manage your queue.</h2><p>The app uses official platform authentication flows. You need your own developer credentials before publishing.</p></div>
+<div class="setup">
+<article><h3>1. Install on Windows</h3><p>Download the EXE from Releases and open it. On first launch, the bootstrapper checks for Python 3.11+, attempts a per-user Python 3.12 install through Windows Package Manager if needed, creates an app virtual environment, and installs required packages from the internet.</p><ul><li>Internet access is required for initial setup.</li><li>Python may need to be installed manually if winget is unavailable.</li><li>The EXE is unsigned, so SmartScreen may display a warning.</li></ul></article>
+<article><h3>2. Connect YouTube</h3><p>Create a Google Cloud project, enable YouTube Data API v3, configure OAuth consent, and create an OAuth Client ID for a Desktop app. Add the downloaded client JSON in the scheduler.</p><ul><li>An API key alone is not enough for uploads.</li><li>Use OAuth 2.0 Desktop App credentials.</li><li>See the README for the detailed setup walkthrough.</li></ul></article>
+<article><h3>3. Connect Facebook</h3><p>Create a Meta developer app and configure the required Page publishing permissions. Enter your own App ID and App Secret in the scheduler.</p><ul><li>Access to a Facebook Page with the required role is needed.</li><li>Meta review or business verification may apply to some permissions.</li><li>See the README for permission and redirect details.</li></ul></article>
+<article><h3>4. Keep credentials private</h3><p>Use your own platform accounts and developer credentials. Do not upload OAuth files, tokens, app secrets, or local database files to GitHub or share them publicly.</p><ul><li>Review privacy and security guidance in the README.</li><li>Keep a backup of local queue data.</li><li>Removing a queue entry does not cancel an already-accepted platform schedule.</li></ul></article>
+</div><div class="note">The release EXE is a small Windows bootstrapper, not a self-contained Python runtime. It locates or installs Python and downloads app dependencies during first-time setup.</div>
+</div></section>
+<section><div class="wrap"><div class="download"><div><div class="kicker">Latest stable release</div><h2 style="margin-bottom:0">ScarClipScheduler v1.2.0</h2><p>Selective clip scheduling, editable per-video metadata, queue removal, and a Windows setup bootstrapper.</p></div><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler.exe">Download EXE ↗</a></div></div></section>
+<section id="faq"><div class="wrap"><div class="head"><div class="kicker">Good to know</div><h2>Frequently asked questions.</h2></div><div class="faq">
+<details><summary>Is the EXE a fully portable app?</summary><p>No. It is a bootstrapper that locates or installs Python and installs app dependencies the first time it runs. Internet access is required during setup.</p></details>
+<details><summary>Does deleting a clip from the queue delete its MP4?</summary><p>No. Delete from list removes local queue records and related local job tracking. It does not delete source MP4/TXT files or cancel schedules already accepted by YouTube or Meta.</p></details>
+<details><summary>Can I schedule just one video?</summary><p>Yes. Select one video to schedule only that video, or use Ctrl/Shift to select multiple. With no selection, scheduling applies to the full queue.</p></details>
+<details><summary>Does the app provide API credentials?</summary><p>No. You must create and supply your own Google Cloud OAuth credentials and Meta developer app credentials. Detailed instructions are in the README.</p></details>
+</div></div></section>
+</main>
+<footer><div class="wrap foot"><span>© 2026 ScarClipScheduler · Created by <a href="https://github.com/sifat-jaman-13"><b>Sifat Jaman</b></a> with assistance from ChatGPT.</span><div class="footlinks"><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Source code</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases">Releases</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/blob/main/README.md">Documentation</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/issues">Report an issue</a></div></div></footer>
+</body></html>

@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](#install-the-windows-exe)
 [![Platform APIs](https://img.shields.io/badge/Publishing-Official%20APIs-0F766E)](#connect-your-platforms)
 
-[Features](#features) · [Install](#install-the-windows-exe) · [API setup](#connect-your-platforms) · [Usage](#manage-your-clip-queue) · [Troubleshooting](#troubleshooting)
+[Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [Download latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest) · [Features](#features) · [Install](#install-the-windows-exe) · [API setup](#connect-your-platforms) · [Usage](#manage-your-clip-queue) · [Troubleshooting](#troubleshooting)
 
 </div>
 
