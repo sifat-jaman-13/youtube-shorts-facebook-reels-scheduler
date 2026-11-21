@@ -234,5 +234,132 @@ class SchedulerRegressionTests(unittest.TestCase):
             instance.conn.close()
 
 
+
+    def test_scan_worker_imports_mp4_and_matching_txt_into_queue(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "clip.mp4"
+            video.write_bytes(b"test-video")
+            video.with_suffix(".txt").write_text(
+                "A clear title\nFull description with context.\n#shorts",
+                encoding="utf-8"
+            )
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.Lock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.folder_var = SimpleNamespace(get=lambda: str(root))
+            instance.youtube_var = SimpleNamespace(get=lambda: True)
+            instance.root = SimpleNamespace(after=lambda *_args: None)
+            instance.save_settings = lambda: None
+            instance.refresh_table = lambda: None
+            messages = []
+            instance.log = messages.append
+            with patch.object(app, "probe_video", return_value=(1080, 1920, 32.0, True)):
+                instance._scan_worker(root)
+            row = instance.get_clips()[0]
+            self.assertEqual(row["title"], "A clear title")
+            self.assertIn("Full description with context.", row["description"])
+            self.assertEqual((row["width"], row["height"], row["duration"], row["fb_ok"]),
+                             (1080, 1920, 32.0, 1))
+            self.assertTrue(any("1 matched TXT pairs, 0 missing TXT files" in m for m in messages))
+            instance.conn.close()
+
+    def test_facebook_publication_worker_handles_sqlite_rows_and_confirms_published(self):
+        now = self.now
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "clip.mp4")
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.Lock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.db_execute(
+                "INSERT INTO clips(path,title,description) VALUES(?,?,?)",
+                (path, "Title", "Description")
+            )
+            instance.db_execute(
+                "INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (path, "page-a", "Page A", (now - timedelta(minutes=10)).isoformat(),
+                 "Scheduled", "reel-123")
+            )
+            instance.secrets = {"fb_pages": [{"id": "page-a", "access_token": "test-token"}]}
+            instance.root = SimpleNamespace(after=lambda *_args: None)
+            instance.verification_button = SimpleNamespace(configure=lambda **_kwargs: None)
+            messages = []
+            instance.log = messages.append
+            instance.get_clips = lambda: [dict(row) for row in instance.conn.execute(
+                "SELECT * FROM clips"
+            ).fetchall()]
+            instance.organize_clip_after_upload = lambda *_args, **_kwargs: False
+            instance.move_completed_queue_to_safe_folder = lambda: 0
+
+            def update_aggregate(clip_path, _pages):
+                instance.db_execute(
+                    "UPDATE clips SET fb_status='Published' WHERE path=?", (clip_path,)
+                )
+            instance.update_fb_aggregate = update_aggregate
+
+            response = SimpleNamespace(
+                ok=True,
+                status_code=200,
+                text="",
+                json=lambda: {"status": {"publishing_phase": {
+                    "publish_status": "published", "status": "complete"
+                }}}
+            )
+            with patch.object(app, "local_now", return_value=now), \
+                 patch.object(app.requests, "get", return_value=response) as get_request:
+                instance._publication_status_worker(show_dialog=False)
+
+            job = instance.conn.execute(
+                "SELECT status FROM facebook_page_jobs WHERE path=?", (path,)
+            ).fetchone()
+            clip = instance.conn.execute(
+                "SELECT fb_status FROM clips WHERE path=?", (path,)
+            ).fetchone()
+            self.assertEqual(job["status"], "Published")
+            self.assertEqual(clip["fb_status"], "Published")
+            self.assertEqual(get_request.call_count, 1)
+            self.assertTrue(any("1 newly confirmed published" in m for m in messages))
+            instance.conn.close()
+
+    def test_facebook_reel_upload_uses_start_binary_upload_and_scheduled_finish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "clip.mp4"
+            video.write_bytes(b"fake-mp4-payload")
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.secrets = {}
+            instance.page_id_var = SimpleNamespace(get=lambda: "")
+            instance.raise_graph_error = app.SchedulerApp.raise_graph_error
+            instance.stop_event = threading.Event()
+            responses = [
+                SimpleNamespace(ok=True, status_code=200, text="", content=b'{}',
+                                json=lambda: {"video_id": "reel-456", "upload_url": "https://upload.invalid/session"}),
+                SimpleNamespace(ok=True, status_code=200, text="", content=b'{"success":true}',
+                                json=lambda: {"success": True}),
+                SimpleNamespace(ok=True, status_code=200, text="", content=b'{"success":true}',
+                                json=lambda: {"success": True, "video_id": "reel-456"}),
+            ]
+            publish_at = self.now + timedelta(hours=3)
+            with patch.object(app.requests, "post", side_effect=responses) as post:
+                video_id = instance.upload_facebook_reel(
+                    str(video), "Test title", "Test description", publish_at,
+                    True, page_id="page-a", page_token="page-token"
+                )
+            self.assertEqual(video_id, "reel-456")
+            self.assertEqual(post.call_count, 3)
+            start_data = post.call_args_list[0].kwargs["data"]
+            upload_headers = post.call_args_list[1].kwargs["headers"]
+            finish_data = post.call_args_list[2].kwargs["data"]
+            self.assertEqual(start_data["upload_phase"], "START")
+            self.assertEqual(upload_headers["Authorization"], "OAuth page-token")
+            self.assertEqual(finish_data["upload_phase"], "FINISH")
+            self.assertEqual(finish_data["video_state"], "SCHEDULED")
+            self.assertEqual(finish_data["scheduled_publish_time"], str(int(publish_at.timestamp())))
+            self.assertEqual(finish_data["is_ai_generated"], "true")
+
 if __name__ == "__main__":
     unittest.main()
