@@ -176,7 +176,7 @@ The app stores the credentials and access tokens locally in your Windows user pr
 
 ### Expected folder structure
 
-StreamSnip AI and other editors can export a matching TXT sidecar beside each MP4:
+ScarClipScheduler reads MP4 videos and optional TXT sidecar files from the **same selected folder**. Each pair must have the same filename before the extension:
 
 ~~~text
 clips/
@@ -186,7 +186,15 @@ clips/
   highlight_002.txt
 ~~~
 
-The first non-empty line in the TXT file is used as the title. Remaining lines become the description. Example:
+**The names must match exactly.** For example, "highlight_001.mp4" must be paired with "highlight_001.txt". "highlight_001.mp4.txt" is not the correct sidecar name. Keep the files directly inside the folder you choose; Scan clips does not search nested subfolders.
+
+The TXT file becomes the post metadata:
+- First non-empty line = video title.
+- All remaining lines = video description.
+- Hashtags can be included in the description.
+- TXT files are optional. If a matching TXT is missing, the MP4 is still added; its filename becomes the title and the description is blank.
+
+Example "highlight_001.txt":
 
 ~~~text
 The Most Unexpected Comeback
@@ -195,16 +203,28 @@ An incredible moment from the stream.
 #Shorts #Gaming #Clips
 ~~~
 
-### Queue workflow
+### Load clips in the app
 
-1. Choose the folder containing your rendered MP4 clips.
-2. Click **Scan clips**.
-3. Review the detected videos and their title/description columns.
-4. Click a single video to edit it, or select a group with Ctrl/Shift-click.
-5. Use **Save metadata** to apply the selected video's edits.
-6. Choose YouTube, Facebook, or both; select the Facebook Pages; set the first post time and interval.
-7. Confirm you have the rights to publish the footage.
-8. Select the videos you want scheduled, then click **Schedule queue**. Leave the list unselected to schedule the whole queue.
+1. Export or copy your finished MP4 clips and matching TXT files into one folder.
+2. Check that every pair has the same basename, such as "clip_001.mp4" and "clip_001.txt".
+3. Open ScarClipScheduler and go to **Publishing queue**.
+4. Click **Browse** and choose the folder containing those files (not the MP4 file itself).
+5. Click **Scan clips**. The detected clips appear in the table with their titles and descriptions.
+6. If a title or description is wrong, select that clip, edit its metadata below the table, and click **Save metadata**.
+
+### Selecting clips and scheduling
+
+- Click one row to select one clip.
+- Hold **Ctrl** while clicking to add or remove individual clips.
+- Hold **Shift** while clicking to select a continuous range.
+- The selection counter tells you the scope: one selected clip, a batch, or the entire queue.
+- The metadata editor changes **only the first highlighted row**. Multi-select is for batch scheduling and removing several entries.
+- Leave the list unselected to schedule the entire queue.
+- After selecting the target clips, choose YouTube, Facebook, or both; select the Facebook Pages; set the first post time and interval; confirm publishing rights; then click **Schedule queue**.
+
+**Stop queue:** Click it while a scheduling run is active. ScarClipScheduler lets the active platform upload request finish, then stops processing the remaining clips. Pending clips remain in the local queue so you can resume later. Posts already accepted by YouTube or Facebook remain scheduled; Stop queue does not cancel platform-side schedules.
+
+**Quit:** Use the **Quit** button in the app to close ScarClipScheduler safely. The terminal displays the running status and should remain open while the app is running.
 
 ### Delete from list — important distinction
 

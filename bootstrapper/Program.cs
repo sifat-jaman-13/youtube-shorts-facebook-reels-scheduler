@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 internal static class Program
 {
-    private const string AppVersion = "1.3.0";
+    private const string AppVersion = "1.4.0";
     private static string InstallDirectory;
 
     private sealed class CommandResult
@@ -168,7 +168,7 @@ internal static class Program
         Console.WriteLine("Your queue, settings, and API credentials remain in %LOCALAPPDATA%\\ScarClipScheduler.");
         Console.WriteLine();
 
-        int appExit = RunAndWait(venvPython, Quote(appPath), InstallDirectory);
+        int appExit = RunApplicationAndWait(venvPython, Quote(appPath), InstallDirectory);
         if (appExit != 0)
             Console.WriteLine("ScarClipScheduler exited with code " + appExit + ".");
         return appExit;
@@ -344,6 +344,35 @@ internal static class Program
                 Output = output,
                 Error = error
             };
+        }
+    }
+
+    private static int RunApplicationAndWait(string executable, string arguments, string workingDirectory)
+    {
+        ProcessStartInfo info = new ProcessStartInfo();
+        info.FileName = executable;
+        info.Arguments = arguments;
+        info.WorkingDirectory = workingDirectory;
+        info.UseShellExecute = false;
+        info.CreateNoWindow = false;
+
+        using (Process process = Process.Start(info))
+        {
+            Console.Title = "ScarClipScheduler by ScarZero - KEEP OPEN";
+            Console.WriteLine();
+            Console.WriteLine("============================================================");
+            Console.WriteLine("  ScarClipScheduler by ScarZero is now running.");
+            Console.WriteLine("============================================================");
+            Console.WriteLine();
+            Console.WriteLine("  IMPORTANT: KEEP THIS TERMINAL WINDOW OPEN.");
+            Console.WriteLine("  ScarClipScheduler is running through this support window.");
+            Console.WriteLine("  Closing this terminal may stop the application.");
+            Console.WriteLine();
+            Console.WriteLine("  To exit safely, click the Quit button inside ScarClipScheduler.");
+            Console.WriteLine("  Do not close this terminal while the app is open.");
+            Console.WriteLine();
+            process.WaitForExit();
+            return process.ExitCode;
         }
     }
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0] - 2026-11-22
+
+### Added
+
+- Added an in-app MP4/TXT import guide with exact matching-name examples and missing-sidecar behaviour.
+- Added a dedicated Quit button and a clear Windows terminal running-status banner.
+- Added an explicit Stop queue action and explained its graceful stop behaviour.
+
+### Changed
+
+- Clarified multi-selection: Ctrl-click and Shift-click select a batch for scheduling; the metadata editor applies only to the first highlighted clip.
+- The selection counter now distinguishes a single clip, a batch, and the full queue.
+- Documented the precise same-basename MP4/TXT pairing rule in the README.
+- Bumped the app and bootstrapper to version 1.4.0.
+
+### Preserved
+
+- Multi-select batch scheduling remains available.
+- Already accepted platform schedules remain unchanged when the local queue is stopped.
+- Existing queue data, settings, and OAuth credentials remain in the local user-data folder.
+
 ## [1.3.0] - 2026-11-22
 
 ### Changed

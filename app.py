@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 APP_DIR = Path(__file__).resolve().parent
 ASSET_DIR = APP_DIR / "assets"
 APP_LOGO_PATH = ASSET_DIR / "scarclipscheduler-logo.png"
@@ -60,6 +60,20 @@ def read_json(path, default):
 
 def write_json(path, data):
     Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def clip_sidecar_path(video_path):
+    """Return the TXT metadata file paired with an MP4 by its exact basename."""
+    return Path(video_path).with_suffix(".txt")
+
+
+def clip_selection_summary(selected_count):
+    """Explain whether the queue action targets one clip, a batch, or all clips."""
+    if selected_count <= 0:
+        return "0 selected | entire queue will be scheduled"
+    if selected_count == 1:
+        return "1 selected | one clip will be scheduled"
+    return f"{selected_count} selected | batch scheduling"
 
 
 def parse_txt(path):
@@ -442,6 +456,16 @@ class SchedulerApp:
             "Danger.TButton", padding=(10, 8), background="#3A1D34",
             foreground="#FDA4AF", bordercolor="#713248", relief="flat"
         )
+        style.configure(
+            "Stop.TButton", padding=(14, 9), background="#4B2234",
+            foreground="#FDA4AF", bordercolor="#844158", relief="flat",
+            font=("Segoe UI Semibold", 9)
+        )
+        style.map(
+            "Stop.TButton",
+            background=[("active", "#612A43"), ("disabled", c["surface_soft"])],
+            foreground=[("disabled", c["muted"])]
+        )
         style.map(
             "Danger.TButton",
             background=[("active", "#51233E")],
@@ -541,6 +565,9 @@ class SchedulerApp:
             header, text=f"DESKTOP APP  |  v{APP_VERSION}",
             style="Version.TLabel"
         ).pack(side="right", anchor="center", pady=(9, 0))
+        ttk.Button(
+            header, text="Quit", command=self.on_close, style="Danger.TButton"
+        ).pack(side="right", padx=(0, 10), pady=(9, 0))
 
         divider = tk.Frame(outer, height=1, background=c["border"], bd=0, highlightthickness=0)
         divider.pack(fill="x", pady=(0, 12))
@@ -570,6 +597,25 @@ class SchedulerApp:
             style="Sub.TLabel"
         ).pack(anchor="w", pady=(2, 0))
 
+        help_box = ttk.LabelFrame(tab, text="  HOW TO LOAD VIDEOS + TXT METADATA  ", padding=9)
+        help_box.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            help_box,
+            text=(
+                "1. Put each MP4 and its TXT file together in the same folder. The names before the extensions "
+                "must match exactly:\n"
+                "   highlight_001.mp4   +   highlight_001.txt\n"
+                "   highlight_002.mp4   +   highlight_002.txt\n"
+                "2. Click Browse and choose that folder, then click Scan clips. Keep the files directly in the "
+                "chosen folder (the scan does not search subfolders).\n"
+                "3. In each TXT file, the first non-empty line is the video title; everything after it is the "
+                "description. A missing TXT does not block the MP4: its filename becomes the title and the "
+                "description starts blank."
+            ),
+            style="Sub.TLabel",
+            justify="left",
+            wraplength=1080
+        ).pack(anchor="w")
         folder_box = ttk.LabelFrame(tab, text="  CLIP SOURCE  ", padding=10)
         folder_box.pack(fill="x", pady=(0, 8))
         ttk.Entry(folder_box, textvariable=self.folder_var).pack(side="left", fill="x", expand=True, padx=(0, 6))
@@ -625,7 +671,10 @@ class SchedulerApp:
         ttk.Button(actions, text="Set recommended start time", command=self.set_recommended_start).pack(side="left")
         self.schedule_button = ttk.Button(actions, text="Schedule queue on selected platforms", command=self.start_scheduling, style="Accent.TButton")
         self.schedule_button.pack(side="left", padx=7)
-        self.stop_button = ttk.Button(actions, text="Stop after current upload", command=self.stop_scheduling, state="disabled")
+        self.stop_button = ttk.Button(
+            actions, text="Stop queue", command=self.stop_scheduling,
+            state="disabled", style="Stop.TButton"
+        )
         self.stop_button.pack(side="left")
         ttk.Button(actions, text="Export file cleanup report", command=self.export_cleanup_report).pack(side="right", padx=(0, 7))
         self.verification_button = ttk.Button(
@@ -648,7 +697,7 @@ class SchedulerApp:
         ttk.Label(selection_bar, textvariable=self.clip_selection_var, style="Sub.TLabel").pack(side="left")
         ttk.Label(
             selection_bar,
-            text="Click one video to edit · Ctrl/Shift-click to select multiple",
+            text="Click one row to edit | Ctrl+click adds/removes rows | Shift+click selects a range",
             style="Sub.TLabel"
         ).pack(side="right")
         columns = (
@@ -657,7 +706,10 @@ class SchedulerApp:
         )
         tree_shell = ttk.Frame(table_frame)
         tree_shell.pack(fill="both", expand=True)
-        self.tree = ttk.Treeview(tree_shell, columns=columns, show="headings", selectmode="extended")
+        self.tree = ttk.Treeview(
+            tree_shell, columns=columns, show="headings",
+            selectmode="extended", height=6
+        )
         self.tree_path_by_id = {}
         self.tree.bind("<<TreeviewSelect>>", self.update_clip_selection_count, add="+")
         self.tree.heading("number", text="#")
@@ -712,6 +764,11 @@ class SchedulerApp:
             padx=10, pady=8
         )
         self.selection_desc.pack(fill="x")
+        ttk.Label(
+            editor,
+            text="The editor changes only the first highlighted clip. Selecting multiple rows is for batch scheduling or removing several queue entries.",
+            style="Sub.TLabel"
+        ).pack(anchor="w", pady=(5, 0))
 
     def build_connections_tab(self):
         # Scrollable work area: at the minimum window size all controls remain
@@ -1524,7 +1581,7 @@ class SchedulerApp:
 
     def update_clip_selection_count(self, _event=None):
         if hasattr(self, "clip_selection_var") and hasattr(self, "tree"):
-            self.clip_selection_var.set(f"{len(self.tree.selection())} selected")
+            self.clip_selection_var.set(clip_selection_summary(len(self.tree.selection())))
 
     def delete_selected_from_list(self):
         """Remove selected records from the local queue without touching source MP4/TXT files."""
@@ -1794,7 +1851,7 @@ class SchedulerApp:
             added = 0
             missing_txt = 0
             for i, video in enumerate(videos, start=1):
-                txt = video.with_suffix(".txt")
+                txt = clip_sidecar_path(video)
                 if txt.exists():
                     title, description = parse_txt(txt)
                 else:
@@ -2292,8 +2349,15 @@ class SchedulerApp:
         self.worker.start()
 
     def stop_scheduling(self):
+        if not self.worker or not self.worker.is_alive():
+            self.stop_button.configure(state="disabled", text="Stop queue")
+            return
         self.stop_event.set()
-        self.log("Stop requested. The current file upload will be allowed to finish.")
+        self.stop_button.configure(state="disabled", text="Stopping...")
+        self.log(
+            "Stop requested. The active platform upload will finish; remaining clips will stay pending. "
+            "Uploads already accepted by YouTube or Facebook remain scheduled."
+        )
 
     def _schedule_worker(
         self, yt_enabled, fb_enabled, yt_ai, fb_ai, made_for_kids,
@@ -2435,7 +2499,9 @@ class SchedulerApp:
             self.log(f"Queue worker stopped: {exc}")
         finally:
             self.root.after(0, lambda: self.schedule_button.configure(state="normal"))
-            self.root.after(0, lambda: self.stop_button.configure(state="disabled"))
+            self.root.after(
+                0, lambda: self.stop_button.configure(state="disabled", text="Stop queue")
+            )
             self.root.after(0, self.refresh_table)
             page_ids = [str(p["id"]) for p in selected_pages]
             self.root.after(

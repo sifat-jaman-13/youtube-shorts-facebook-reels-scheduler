@@ -13,6 +13,94 @@ import app
 
 
 class SchedulerRegressionTests(unittest.TestCase):
+    def test_video_sidecar_uses_the_same_basename_with_txt_extension(self):
+        video = Path("clips") / "highlight_001.mp4"
+        self.assertEqual(
+            app.clip_sidecar_path(video),
+            Path("clips") / "highlight_001.txt"
+        )
+
+    def test_clip_selection_summary_explains_single_batch_and_full_queue(self):
+        self.assertEqual(
+            app.clip_selection_summary(0),
+            "0 selected | entire queue will be scheduled"
+        )
+        self.assertEqual(
+            app.clip_selection_summary(1),
+            "1 selected | one clip will be scheduled"
+        )
+        self.assertEqual(
+            app.clip_selection_summary(4),
+            "4 selected | batch scheduling"
+        )
+
+    def test_support_terminal_warns_users_to_keep_it_open_and_quit_in_app(self):
+        project = Path(app.__file__).resolve().parent
+        source = (project / "bootstrapper" / "Program.cs").read_text(encoding="utf-8")
+        self.assertIn("ScarClipScheduler by ScarZero is now running.", source)
+        self.assertIn("KEEP THIS TERMINAL WINDOW OPEN", source)
+        self.assertIn("Closing this terminal may stop the application.", source)
+        self.assertIn("click the Quit button inside ScarClipScheduler", source)
+        self.assertIn("RunApplicationAndWait", source)
+
+    def test_stop_queue_requests_graceful_stop_and_disables_button(self):
+        class FakeEvent:
+            def __init__(self):
+                self.was_set = False
+            def set(self):
+                self.was_set = True
+
+        class FakeWorker:
+            def is_alive(self):
+                return True
+
+        class FakeButton:
+            def __init__(self):
+                self.options = {}
+            def configure(self, **kwargs):
+                self.options.update(kwargs)
+
+        messages = []
+        fake = SimpleNamespace(
+            worker=FakeWorker(),
+            stop_event=FakeEvent(),
+            stop_button=FakeButton(),
+            log=messages.append
+        )
+        app.SchedulerApp.stop_scheduling(fake)
+        self.assertTrue(fake.stop_event.was_set)
+        self.assertEqual(fake.stop_button.options, {
+            "state": "disabled",
+            "text": "Stopping..."
+        })
+        self.assertTrue(any("active platform upload will finish" in m for m in messages))
+
+    def test_stop_queue_when_idle_does_not_signal_a_worker(self):
+        class FakeEvent:
+            def __init__(self):
+                self.was_set = False
+            def set(self):
+                self.was_set = True
+
+        class FakeButton:
+            def __init__(self):
+                self.options = {}
+            def configure(self, **kwargs):
+                self.options.update(kwargs)
+
+        fake = SimpleNamespace(
+            worker=None,
+            stop_event=FakeEvent(),
+            stop_button=FakeButton(),
+            log=lambda _message: None
+        )
+        app.SchedulerApp.stop_scheduling(fake)
+        self.assertFalse(fake.stop_event.was_set)
+        self.assertEqual(fake.stop_button.options, {
+            "state": "disabled",
+            "text": "Stop queue"
+        })
+
     def test_branded_app_icon_is_valid_and_embedded_in_windows_package(self):
         project = Path(app.__file__).resolve().parent
         logo_path = project / "assets" / "scarclipscheduler-logo.png"
