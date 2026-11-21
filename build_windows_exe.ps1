@@ -15,8 +15,11 @@ $arguments = @(
     '/target:exe',
     '/platform:anycpu',
     "/out:$output",
+    "/win32icon:$(Join-Path $root 'assets\scarclipscheduler.ico')",
     "/resource:$(Join-Path $root 'app.py'),ScarClipScheduler.app.py",
     "/resource:$(Join-Path $root 'requirements.txt'),ScarClipScheduler.requirements.txt",
+    "/resource:$(Join-Path $root 'assets\scarclipscheduler-logo.png'),ScarClipScheduler.logo.png",
+    "/resource:$(Join-Path $root 'assets\scarclipscheduler.ico'),ScarClipScheduler.logo.ico",
     (Join-Path $root 'bootstrapper\Program.cs')
 )
 Write-Host 'Building the self-contained ScarClipScheduler terminal bootstrapper...'

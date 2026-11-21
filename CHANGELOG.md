@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] - 2026-11-22
+
+### Changed
+
+- Redesigned the desktop interface with a dark navy palette, violet/blue accents, clearer visual hierarchy, modern tab styling, and more readable tables and inputs.
+- Added the ScarClipScheduler film/play/clock logo to the app header, window icon, taskbar, and Windows EXE.
+- Bundled the logo PNG and multi-size ICO in the Windows bootstrapper and added them to package verification.
+- Increased the default window size while retaining a practical resizable minimum.
+
+### Preserved
+
+- Publishing, OAuth, scheduling, upload, queue, and cleanup behavior remains unchanged.
+- Existing local queue database, settings, and credentials remain in their current user-data folder.
+
 ## [1.2.0] - 2026-11-22
 
 ### Added

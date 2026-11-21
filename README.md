@@ -4,6 +4,8 @@
 
 # ScarClipScheduler
 
+![ScarClipScheduler app logo](assets/scarclipscheduler-logo.png)
+
 **A Windows desktop scheduler for YouTube Shorts and Facebook Page Reels.**
 
 [![Windows](https://img.shields.io/badge/Windows-10%2B-2563EB?logo=windows&logoColor=white)](#install-the-windows-exe)
@@ -24,6 +26,7 @@ It uses the official Google YouTube Data API and Meta Graph API. It does not sim
 
 ## Features
 
+- **Modern desktop interface:** dark navy workspace, violet/blue accents, readable queue styling, and a branded app icon.
 | Feature | What it does |
 |---|---|
 | One publishing queue | Manage YouTube Shorts and Facebook Page Reels from one window |

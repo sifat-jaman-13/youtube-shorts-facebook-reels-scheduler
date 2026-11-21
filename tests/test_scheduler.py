@@ -1,4 +1,5 @@
 import sqlite3
+import struct
 import tempfile
 import threading
 import unittest
@@ -12,6 +13,22 @@ import app
 
 
 class SchedulerRegressionTests(unittest.TestCase):
+    def test_branded_app_icon_is_valid_and_embedded_in_windows_package(self):
+        project = Path(app.__file__).resolve().parent
+        logo_path = project / "assets" / "scarclipscheduler-logo.png"
+        icon_path = project / "assets" / "scarclipscheduler.ico"
+        self.assertTrue(logo_path.is_file())
+        self.assertTrue(icon_path.is_file())
+        self.assertEqual(logo_path.read_bytes()[:8], bytes((137, 80, 78, 71, 13, 10, 26, 10)))
+        icon = icon_path.read_bytes()
+        self.assertGreaterEqual(len(icon), 1000)
+        reserved, icon_type, count = struct.unpack("<HHH", icon[:6])
+        self.assertEqual((reserved, icon_type), (0, 1))
+        self.assertGreaterEqual(count, 3)
+        self.assertIn("ScarClipScheduler.logo.png", (project / "bootstrapper" / "Program.cs").read_text(encoding="utf-8"))
+        self.assertIn("ScarClipScheduler.logo.ico", (project / "bootstrapper" / "Program.cs").read_text(encoding="utf-8"))
+        self.assertIn("/win32icon:", (project / "build_windows_exe.ps1").read_text(encoding="utf-8"))
+
     def setUp(self):
         self.now = datetime(2026, 11, 22, 12, 0, tzinfo=ZoneInfo("Asia/Dhaka"))
 

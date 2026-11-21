@@ -21,7 +21,11 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
+APP_DIR = Path(__file__).resolve().parent
+ASSET_DIR = APP_DIR / "assets"
+APP_LOGO_PATH = ASSET_DIR / "scarclipscheduler-logo.png"
+APP_ICON_PATH = ASSET_DIR / "scarclipscheduler.ico"
 GRAPH_VERSION = "v27.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 DEFAULT_FOLDER = str(Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "StreamSnip AI" / "source" / "out")
@@ -230,9 +234,11 @@ class SchedulerApp:
         # Keep a practical minimum restored size: the app cannot be squeezed
         # into a layout where controls overlap. Windows' normal minimize button
         # remains available in the title bar.
-        self.root.geometry("1160x860")
-        self.root.minsize(1040, 800)
+        self.root.geometry("1280x900")
+        self.root.minsize(1120, 760)
         self.root.resizable(True, True)
+        self.header_logo = None
+        self.apply_app_icon()
         self.stop_event = threading.Event()
         self.worker = None
         self.scan_worker = None
@@ -298,6 +304,20 @@ class SchedulerApp:
         self.root.after(15 * 60 * 1000, self.auto_check_publication_status)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def apply_app_icon(self):
+        """Apply the bundled ScarClipScheduler mark to the window and taskbar."""
+        try:
+            if APP_ICON_PATH.is_file():
+                self.root.iconbitmap(default=str(APP_ICON_PATH))
+        except (tk.TclError, OSError):
+            pass
+        try:
+            if APP_LOGO_PATH.is_file():
+                self.header_logo = tk.PhotoImage(file=str(APP_LOGO_PATH)).subsample(8, 8)
+                self.root.iconphoto(True, self.header_logo)
+        except (tk.TclError, OSError):
+            self.header_logo = None
+
     def create_db(self):
         with self.db_lock:
             self.conn.execute("""
@@ -346,71 +366,190 @@ class SchedulerApp:
         except tk.TclError:
             pass
 
-        # Minimalist slate / white / teal theme.
+        # Deep navy surfaces with vivid violet/blue accents.
         self.colors = {
-            "app_bg": "#F2F5F7",
-            "surface": "#FFFFFF",
-            "surface_soft": "#E9EFF2",
-            "text": "#1E2933",
-            "muted": "#647582",
-            "accent": "#147D78",
-            "accent_hover": "#0F6965",
-            "accent_soft": "#DCEFED",
-            "border": "#D8E1E5",
-            "danger": "#B54745",
-            "success": "#16765B",
+            "app_bg": "#0B1020",
+            "surface": "#121A2D",
+            "surface_soft": "#1B2640",
+            "surface_alt": "#202B49",
+            "text": "#F1F5FF",
+            "muted": "#9AA8C4",
+            "accent": "#8B5CF6",
+            "accent_hover": "#7544E8",
+            "accent_soft": "#302153",
+            "border": "#293653",
+            "danger": "#FB7185",
+            "success": "#34D399",
+            "warning": "#FBBF24",
+            "info": "#60A5FA",
         }
         c = self.colors
         self.root.configure(background=c["app_bg"])
+
         style.configure(".", font=("Segoe UI", 9), foreground=c["text"])
         style.configure("TFrame", background=c["app_bg"])
+        style.configure("Card.TFrame", background=c["surface"])
         style.configure("TLabel", background=c["app_bg"], foreground=c["text"])
-        style.configure("Title.TLabel", font=("Segoe UI Semibold", 18), foreground=c["text"], background=c["app_bg"])
-        style.configure("Sub.TLabel", font=("Segoe UI", 9), foreground=c["muted"], background=c["app_bg"])
-        style.configure("TLabelframe", background=c["surface"], bordercolor=c["border"], relief="solid")
-        style.configure("TLabelframe.Label", background=c["surface"], foreground=c["accent"], font=("Segoe UI Semibold", 9))
-        style.configure("TButton", padding=(9, 7), background=c["surface_soft"], foreground=c["text"], bordercolor=c["border"])
-        style.map("TButton", background=[("active", "#DDE7EA")], foreground=[("disabled", "#9AA7AE")])
-        style.configure("Accent.TButton", padding=(12, 8), background=c["accent"], foreground="#FFFFFF",
-                        bordercolor=c["accent"], font=("Segoe UI Semibold", 9))
-        style.map("Accent.TButton", background=[("active", c["accent_hover"]), ("pressed", c["accent_hover"])])
-        style.configure("Danger.TButton", padding=(9, 7), background="#FCE8E7",
-                        foreground=c["danger"], bordercolor="#E7B7B3")
-        style.map("Danger.TButton", background=[("active", "#F7D6D3")],
-                  foreground=[("disabled", "#BCA5A3")])
-        style.configure("TCheckbutton", background=c["surface"], foreground=c["text"], padding=3)
-        style.map("TCheckbutton", background=[("active", c["surface"])])
-        style.configure("TEntry", fieldbackground=c["surface"], foreground=c["text"], bordercolor=c["border"], padding=5)
-        style.configure("TSpinbox", fieldbackground=c["surface"], foreground=c["text"], bordercolor=c["border"], padding=4)
-        style.configure("TCombobox", fieldbackground=c["surface"], foreground=c["text"], bordercolor=c["border"], padding=5)
-        style.configure("TNotebook", background=c["app_bg"], borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(16, 9), background=c["surface_soft"], foreground=c["muted"])
-        style.map("TNotebook.Tab", background=[("selected", c["surface"]), ("active", "#E1E9EC")],
-                  foreground=[("selected", c["accent"]), ("active", c["text"])])
-        style.configure("Treeview", rowheight=29, font=("Segoe UI", 9), background=c["surface"],
-                        fieldbackground=c["surface"], foreground=c["text"], bordercolor=c["border"])
-        style.configure("Treeview.Heading", font=("Segoe UI Semibold", 9), background=c["surface_soft"],
-                        foreground=c["text"], relief="flat")
-        style.map("Treeview", background=[("selected", c["accent_soft"])],
-                  foreground=[("selected", c["text"])])
+        style.configure(
+            "Title.TLabel", font=("Segoe UI Semibold", 19),
+            foreground=c["text"], background=c["app_bg"]
+        )
+        style.configure(
+            "Sub.TLabel", font=("Segoe UI", 9),
+            foreground=c["muted"], background=c["app_bg"]
+        )
+        style.configure(
+            "Section.TLabel", font=("Segoe UI Semibold", 12),
+            foreground=c["text"], background=c["app_bg"]
+        )
+        style.configure(
+            "Eyebrow.TLabel", font=("Segoe UI Semibold", 8),
+            foreground="#B9A5FF", background=c["app_bg"]
+        )
+        style.configure(
+            "Version.TLabel", font=("Segoe UI Semibold", 9),
+            foreground="#E9DFFF", background=c["accent_soft"], padding=(12, 7)
+        )
+        style.configure(
+            "TLabelframe", background=c["surface"], foreground=c["text"],
+            bordercolor=c["border"], relief="solid", borderwidth=1, padding=8
+        )
+        style.configure(
+            "TLabelframe.Label", background=c["surface"],
+            foreground="#BCA8FF", font=("Segoe UI Semibold", 9)
+        )
+        style.configure(
+            "TButton", padding=(11, 8), background=c["surface_soft"],
+            foreground=c["text"], bordercolor=c["border"], relief="flat",
+            font=("Segoe UI Semibold", 9)
+        )
+        style.map(
+            "TButton",
+            background=[("active", c["surface_alt"]), ("pressed", c["surface_alt"])],
+            foreground=[("disabled", "#66728D")]
+        )
+        style.configure(
+            "Accent.TButton", padding=(14, 9), background=c["accent"],
+            foreground="#FFFFFF", bordercolor=c["accent"], relief="flat",
+            font=("Segoe UI Semibold", 9)
+        )
+        style.map(
+            "Accent.TButton",
+            background=[("active", c["accent_hover"]), ("pressed", c["accent_hover"])],
+            foreground=[("disabled", "#D8D0EA")]
+        )
+        style.configure(
+            "Danger.TButton", padding=(10, 8), background="#3A1D34",
+            foreground="#FDA4AF", bordercolor="#713248", relief="flat"
+        )
+        style.map(
+            "Danger.TButton",
+            background=[("active", "#51233E")],
+            foreground=[("disabled", "#8F7180")]
+        )
+        style.configure(
+            "TCheckbutton", background=c["surface"], foreground=c["text"],
+            padding=5, font=("Segoe UI", 9)
+        )
+        style.map(
+            "TCheckbutton",
+            background=[("active", c["surface"])],
+            foreground=[("disabled", c["muted"])]
+        )
+        style.configure(
+            "TEntry", fieldbackground=c["surface_alt"], foreground=c["text"],
+            insertcolor=c["text"], bordercolor=c["border"], lightcolor=c["accent"],
+            darkcolor=c["border"], padding=7
+        )
+        style.map(
+            "TEntry",
+            fieldbackground=[("readonly", c["surface_alt"])],
+            bordercolor=[("focus", c["accent"])]
+        )
+        style.configure(
+            "TSpinbox", fieldbackground=c["surface_alt"], foreground=c["text"],
+            arrowcolor=c["muted"], bordercolor=c["border"], padding=6
+        )
+        style.configure(
+            "TCombobox", fieldbackground=c["surface_alt"], foreground=c["text"],
+            arrowcolor=c["muted"], bordercolor=c["border"], padding=7
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", c["surface_alt"]), ("focus", c["surface_alt"])],
+            foreground=[("readonly", c["text"])],
+            selectbackground=[("readonly", c["accent_soft"])],
+            selectforeground=[("readonly", c["text"])]
+        )
+        style.configure("TNotebook", background=c["app_bg"], borderwidth=0, tabmargins=(0, 7, 0, 0))
+        style.configure(
+            "TNotebook.Tab", padding=(19, 11), background=c["surface"],
+            foreground=c["muted"], bordercolor=c["border"],
+            font=("Segoe UI Semibold", 9)
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", c["accent_soft"]), ("active", c["surface_alt"])],
+            foreground=[("selected", "#E9DFFF"), ("active", c["text"])]
+        )
+        style.configure(
+            "Treeview", rowheight=34, font=("Segoe UI", 9),
+            background=c["surface"], fieldbackground=c["surface"],
+            foreground=c["text"], bordercolor=c["border"],
+            relief="flat"
+        )
+        style.configure(
+            "Treeview.Heading", font=("Segoe UI Semibold", 9),
+            background=c["surface_soft"], foreground="#CBD5EF",
+            relief="flat", padding=(8, 10)
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", c["accent_soft"])],
+            foreground=[("selected", "#FFFFFF")]
+        )
+        style.configure(
+            "Vertical.TScrollbar", troughcolor=c["app_bg"],
+            background=c["surface_soft"], bordercolor=c["app_bg"],
+            arrowcolor=c["muted"]
+        )
+        style.configure(
+            "Horizontal.TScrollbar", troughcolor=c["app_bg"],
+            background=c["surface_soft"], bordercolor=c["app_bg"],
+            arrowcolor=c["muted"]
+        )
 
-        outer = ttk.Frame(self.root, padding=14)
+        outer = ttk.Frame(self.root, padding=(20, 16))
         outer.pack(fill="both", expand=True)
 
         header = ttk.Frame(outer)
-        header.pack(fill="x", pady=(0, 10))
-        ttk.Label(header, text="ScarClipScheduler", style="Title.TLabel").pack(anchor="w")
+        header.pack(fill="x", pady=(0, 12))
+
+        brand = ttk.Frame(header)
+        brand.pack(side="left", fill="y")
+        if self.header_logo is not None:
+            ttk.Label(brand, image=self.header_logo, background=c["app_bg"]).pack(side="left", padx=(0, 12))
+        brand_copy = ttk.Frame(brand)
+        brand_copy.pack(side="left", fill="y", pady=(4, 0))
+        ttk.Label(brand_copy, text="ScarClipScheduler", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
-            header,
-            text="Local-first scheduler for YouTube Shorts and Facebook Page Reels",
-            style="Sub.TLabel"
-        ).pack(anchor="w", pady=(2, 0))
+            brand_copy, text="CLIP  /  SCHEDULE  /  SHARE",
+            style="Eyebrow.TLabel"
+        ).pack(anchor="w", pady=(1, 0))
+
+        ttk.Label(
+            header, text=f"DESKTOP APP  |  v{APP_VERSION}",
+            style="Version.TLabel"
+        ).pack(side="right", anchor="center", pady=(9, 0))
+
+        divider = tk.Frame(outer, height=1, background=c["border"], bd=0, highlightthickness=0)
+        divider.pack(fill="x", pady=(0, 12))
 
         notebook = ttk.Notebook(outer)
         notebook.pack(fill="both", expand=True)
-        self.publish_tab = ttk.Frame(notebook, padding=10)
+        self.publish_tab = ttk.Frame(notebook, padding=12)
         self.connections_tab = ttk.Frame(notebook, padding=14)
-        self.logs_tab = ttk.Frame(notebook, padding=10)
+        self.logs_tab = ttk.Frame(notebook, padding=12)
         notebook.add(self.publish_tab, text="  Publishing queue  ")
         notebook.add(self.connections_tab, text="  Connections  ")
         notebook.add(self.logs_tab, text="  Activity log  ")
@@ -422,14 +561,23 @@ class SchedulerApp:
 
     def build_publish_tab(self):
         tab = self.publish_tab
-        folder_box = ttk.LabelFrame(tab, text="Clip source folder", padding=8)
+        intro = ttk.Frame(tab)
+        intro.pack(fill="x", pady=(0, 10))
+        ttk.Label(intro, text="Publishing workspace", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(
+            intro,
+            text="Review your clips, choose destinations and schedule the next batch.",
+            style="Sub.TLabel"
+        ).pack(anchor="w", pady=(2, 0))
+
+        folder_box = ttk.LabelFrame(tab, text="  CLIP SOURCE  ", padding=10)
         folder_box.pack(fill="x", pady=(0, 8))
         ttk.Entry(folder_box, textvariable=self.folder_var).pack(side="left", fill="x", expand=True, padx=(0, 6))
         ttk.Button(folder_box, text="Browse", command=self.browse_folder).pack(side="left", padx=3)
         ttk.Button(folder_box, text="Scan clips", command=self.scan_folder).pack(side="left", padx=3)
         ttk.Label(tab, textvariable=self.queue_summary_var).pack(anchor="w", pady=(0, 7))
 
-        schedule_box = ttk.LabelFrame(tab, text="Publishing schedule", padding=9)
+        schedule_box = ttk.LabelFrame(tab, text="  PUBLISHING SCHEDULE  ", padding=10)
         schedule_box.pack(fill="x", pady=(0, 8))
         row1 = ttk.Frame(schedule_box)
         row1.pack(fill="x")
@@ -487,7 +635,7 @@ class SchedulerApp:
         ttk.Button(actions, text="Reset failed items", command=self.reset_failed).pack(side="right")
 
         table_frame = ttk.LabelFrame(tab, text="Detected clips", padding=5)
-        table_frame.pack(fill="both", expand=True)
+        table_frame.pack(fill="both", expand=True, pady=(2, 0))
         selection_bar = ttk.Frame(table_frame)
         selection_bar.pack(fill="x", pady=(0, 5))
         ttk.Button(selection_bar, text="Select all", command=self.select_all_clips).pack(side="left")
@@ -543,10 +691,10 @@ class SchedulerApp:
         self.tree.tag_configure("error", foreground=self.colors["danger"])
         self.tree.tag_configure("scheduled", foreground=self.colors["success"])
         self.tree.tag_configure("published", foreground=self.colors["success"])
-        self.tree.tag_configure("partial", foreground="#A56600")
+        self.tree.tag_configure("partial", foreground=self.colors["warning"])
         self.tree.tag_configure("pending", foreground=self.colors["muted"])
 
-        editor = ttk.LabelFrame(tab, text="Edit selected clip metadata (saved in the local queue)", padding=8)
+        editor = ttk.LabelFrame(tab, text="  EDIT SELECTED CLIP  ", padding=9)
         editor.pack(fill="x", pady=(8, 0))
         edit_top = ttk.Frame(editor)
         edit_top.pack(fill="x")
@@ -560,7 +708,8 @@ class SchedulerApp:
             background=self.colors["surface"], foreground=self.colors["text"],
             insertbackground=self.colors["accent"], relief="flat",
             highlightthickness=1, highlightbackground=self.colors["border"],
-            highlightcolor=self.colors["accent"], padx=8, pady=6
+            highlightcolor=self.colors["accent"], selectbackground=self.colors["accent_soft"],
+            padx=10, pady=8
         )
         self.selection_desc.pack(fill="x")
 

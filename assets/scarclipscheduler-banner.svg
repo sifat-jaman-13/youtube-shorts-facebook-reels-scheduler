@@ -3,20 +3,20 @@
   <desc id="desc">A modern dark navy and teal banner for a YouTube Shorts and Facebook Reels publishing scheduler.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#101A31"/>
-      <stop offset=".58" stop-color="#123D49"/>
-      <stop offset="1" stop-color="#0D766E"/>
+      <stop offset="0" stop-color="#0B1020"/>
+      <stop offset=".58" stop-color="#24164A"/>
+      <stop offset="1" stop-color="#6D3CE8"/>
     </linearGradient>
     <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#65E4C8"/>
-      <stop offset="1" stop-color="#6DBBFF"/>
+      <stop offset="0" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#60A5FA"/>
     </linearGradient>
     <radialGradient id="glow" cx=".82" cy=".18" r=".65">
-      <stop offset="0" stop-color="#2FC7B2" stop-opacity=".38"/>
-      <stop offset="1" stop-color="#2FC7B2" stop-opacity="0"/>
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
     </radialGradient>
     <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1.4" fill="#BDEFE7" opacity=".18"/>
+      <circle cx="2" cy="2" r="1.4" fill="#DCD6FF" opacity=".18"/>
     </pattern>
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="16" stdDeviation="14" flood-color="#061322" flood-opacity=".32"/>
@@ -25,21 +25,21 @@
   <rect width="1200" height="360" rx="28" fill="url(#bg)"/>
   <rect width="1200" height="360" rx="28" fill="url(#glow)"/>
   <rect width="1200" height="360" rx="28" fill="url(#dots)"/>
-  <circle cx="1080" cy="20" r="170" fill="#67DCC8" opacity=".08"/>
-  <circle cx="1015" cy="340" r="250" fill="#6CB9FF" opacity=".07"/>
-  <path d="M865 0h335v360H770z" fill="#0B2137" opacity=".16"/>
+  <circle cx="1080" cy="20" r="170" fill="#A78BFA" opacity=".08"/>
+  <circle cx="1015" cy="340" r="250" fill="#60A5FA" opacity=".07"/>
+  <path d="M865 0h335v360H770z" fill="#17132E" opacity=".16"/>
   <g transform="translate(76 67)">
     <rect x="0" y="0" width="64" height="64" rx="18" fill="url(#accent)"/>
     <path d="M24 19v26l23-13z" fill="#0D2A3A"/>
     <rect x="15" y="78" width="34" height="4" rx="2" fill="#A8F3E4" opacity=".7"/>
-    <text x="83" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="3.4" fill="#A9EDE0">CREATOR WORKFLOW</text>
+    <text x="83" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="3.4" fill="#DCD6FF">CREATOR WORKFLOW</text>
     <text x="0" y="151" font-family="Segoe UI, Arial, sans-serif" font-size="54" font-weight="750" fill="#FFFFFF">ScarClipScheduler</text>
-    <text x="2" y="198" font-family="Segoe UI, Arial, sans-serif" font-size="25" fill="#D8F4F0">Schedule Shorts and Reels with control.</text>
+    <text x="2" y="198" font-family="Segoe UI, Arial, sans-serif" font-size="25" fill="#E9E7FF">Schedule Shorts and Reels with control.</text>
     <g transform="translate(2 236)">
-      <rect width="154" height="34" rx="17" fill="#D9F8F1" opacity=".14" stroke="#99E7D7" stroke-opacity=".48"/>
-      <text x="77" y="22" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="650" fill="#E8FFFA">YOUTUBE SHORTS</text>
-      <rect x="166" width="174" height="34" rx="17" fill="#D9F8F1" opacity=".14" stroke="#99E7D7" stroke-opacity=".48"/>
-      <text x="253" y="22" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="650" fill="#E8FFFA">FACEBOOK REELS</text>
+      <rect width="154" height="34" rx="17" fill="#E9DFFF" opacity=".14" stroke="#B9A5FF" stroke-opacity=".48"/>
+      <text x="77" y="22" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="650" fill="#F7F5FF">YOUTUBE SHORTS</text>
+      <rect x="166" width="174" height="34" rx="17" fill="#E9DFFF" opacity=".14" stroke="#B9A5FF" stroke-opacity=".48"/>
+      <text x="253" y="22" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="650" fill="#F7F5FF">FACEBOOK REELS</text>
     </g>
   </g>
   <g transform="translate(824 67)" filter="url(#shadow)">
@@ -51,29 +51,29 @@
     <circle cx="59" cy="24" r="5" fill="#54B68C"/>
     <text x="82" y="29" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#47606A">PUBLISHING QUEUE</text>
     <g transform="translate(22 70)">
-      <rect width="262" height="44" rx="11" fill="#F0F6F7"/>
-      <rect x="12" y="11" width="22" height="22" rx="6" fill="#D3F1E9"/>
-      <path d="M20 16v12l10-6z" fill="#168477"/>
-      <text x="46" y="19" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#203846">Clip 01 · Ready</text>
-      <text x="46" y="33" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#68808B">Title and description editable</text>
+      <rect width="262" height="44" rx="11" fill="#202B49"/>
+      <rect x="12" y="11" width="22" height="22" rx="6" fill="#35245D"/>
+      <path d="M20 16v12l10-6z" fill="#A78BFA"/>
+      <text x="46" y="19" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#F1F5FF">Clip 01 · Ready</text>
+      <text x="46" y="33" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#9AA8C4">Title and description editable</text>
       <rect x="218" y="14" width="32" height="16" rx="8" fill="#D9F2E7"/>
       <circle cx="226" cy="22" r="4" fill="#248F6D"/>
     </g>
     <g transform="translate(22 124)">
-      <rect width="262" height="44" rx="11" fill="#F0F6F7"/>
-      <rect x="12" y="11" width="22" height="22" rx="6" fill="#DCEBFA"/>
-      <path d="M20 16v12l10-6z" fill="#477AB5"/>
-      <text x="46" y="19" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#203846">Clip 02 · Selected</text>
-      <text x="46" y="33" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#68808B">Schedule one or several</text>
+      <rect width="262" height="44" rx="11" fill="#202B49"/>
+      <rect x="12" y="11" width="22" height="22" rx="6" fill="#1E355E"/>
+      <path d="M20 16v12l10-6z" fill="#60A5FA"/>
+      <text x="46" y="19" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#F1F5FF">Clip 02 · Selected</text>
+      <text x="46" y="33" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#9AA8C4">Schedule one or several</text>
       <rect x="218" y="14" width="32" height="16" rx="8" fill="#D9E9FB"/>
-      <circle cx="226" cy="22" r="4" fill="#477AB5"/>
+      <circle cx="226" cy="22" r="4" fill="#60A5FA"/>
     </g>
     <g transform="translate(22 178)">
-      <rect width="262" height="32" rx="10" fill="#E0F4EF"/>
+      <rect width="262" height="32" rx="10" fill="#202B49"/>
       <path d="M14 16l6 6 11-13" fill="none" stroke="#18856F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="45" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="700" fill="#1C6D61">Review · Schedule · Verify</text>
+      <text x="45" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="700" fill="#E9DFFF">Review · Schedule · Verify</text>
     </g>
   </g>
   <path d="M760 45c42 23 74 42 98 80" fill="none" stroke="url(#accent)" stroke-width="2.5" stroke-linecap="round" opacity=".75" stroke-dasharray="5 9"/>
-  <circle cx="760" cy="45" r="5" fill="#85EAD6"/>
+  <circle cx="760" cy="45" r="5" fill="#B9A5FF"/>
 </svg>

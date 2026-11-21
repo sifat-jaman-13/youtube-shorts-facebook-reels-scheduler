@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 internal static class Program
 {
-    private const string AppVersion = "1.2.0";
+    private const string AppVersion = "1.3.0";
     private static string InstallDirectory;
 
     private sealed class CommandResult
@@ -59,8 +59,12 @@ internal static class Program
 
         string appPath = Path.Combine(InstallDirectory, "app.py");
         string requirementsPath = Path.Combine(InstallDirectory, "requirements.txt");
+        string assetsDirectory = Path.Combine(InstallDirectory, "assets");
+        Directory.CreateDirectory(assetsDirectory);
         ExtractResource("ScarClipScheduler.app.py", appPath);
         ExtractResource("ScarClipScheduler.requirements.txt", requirementsPath);
+        ExtractResource("ScarClipScheduler.logo.png", Path.Combine(assetsDirectory, "scarclipscheduler-logo.png"));
+        ExtractResource("ScarClipScheduler.logo.ico", Path.Combine(assetsDirectory, "scarclipscheduler.ico"));
 
         Console.WriteLine("[1/4] Checking for Python 3.11 or newer...");
         string python = FindPython();
@@ -180,11 +184,18 @@ internal static class Program
 
         string appPath = Path.Combine(temp, "app.py");
         string requirementsPath = Path.Combine(temp, "requirements.txt");
+        string assetsDirectory = Path.Combine(temp, "assets");
+        Directory.CreateDirectory(assetsDirectory);
+        string logoPath = Path.Combine(assetsDirectory, "scarclipscheduler-logo.png");
+        string iconPath = Path.Combine(assetsDirectory, "scarclipscheduler.ico");
         ExtractResource("ScarClipScheduler.app.py", appPath);
         ExtractResource("ScarClipScheduler.requirements.txt", requirementsPath);
+        ExtractResource("ScarClipScheduler.logo.png", logoPath);
+        ExtractResource("ScarClipScheduler.logo.ico", iconPath);
 
-        if (new FileInfo(appPath).Length < 10000 || new FileInfo(requirementsPath).Length < 20)
-            throw new InvalidOperationException("The embedded application or requirements resource is incomplete.");
+        if (new FileInfo(appPath).Length < 10000 || new FileInfo(requirementsPath).Length < 20 ||
+            new FileInfo(logoPath).Length < 10000 || new FileInfo(iconPath).Length < 1000)
+            throw new InvalidOperationException("The embedded app, requirements, or branding resources are incomplete.");
 
         string python = FindPython();
         if (String.IsNullOrEmpty(python))
@@ -208,6 +219,9 @@ internal static class Program
         {
             if (input == null)
                 throw new InvalidOperationException("The EXE is missing its embedded application resource: " + resourceName);
+            string directory = Path.GetDirectoryName(destination);
+            if (!String.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
             using (FileStream output = File.Create(destination))
                 input.CopyTo(output);
         }

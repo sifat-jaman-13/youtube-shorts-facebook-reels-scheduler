@@ -6,6 +6,7 @@ on:
     paths:
       - "app.py"
       - "requirements.txt"
+      - "assets/**"
       - "bootstrapper/**"
       - "build_windows_exe.ps1"
       - ".github/workflows/build-exe.yml"
