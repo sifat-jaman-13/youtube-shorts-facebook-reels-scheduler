@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "1.1.9"
+APP_VERSION = "1.2.0"
 GRAPH_VERSION = "v27.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 DEFAULT_FOLDER = str(Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "StreamSnip AI" / "source" / "out")
@@ -235,6 +235,7 @@ class SchedulerApp:
         self.root.resizable(True, True)
         self.stop_event = threading.Event()
         self.worker = None
+        self.scan_worker = None
         self.verification_worker = None
         self.db_lock = threading.Lock()
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -373,6 +374,10 @@ class SchedulerApp:
         style.configure("Accent.TButton", padding=(12, 8), background=c["accent"], foreground="#FFFFFF",
                         bordercolor=c["accent"], font=("Segoe UI Semibold", 9))
         style.map("Accent.TButton", background=[("active", c["accent_hover"]), ("pressed", c["accent_hover"])])
+        style.configure("Danger.TButton", padding=(9, 7), background="#FCE8E7",
+                        foreground=c["danger"], bordercolor="#E7B7B3")
+        style.map("Danger.TButton", background=[("active", "#F7D6D3")],
+                  foreground=[("disabled", "#BCA5A3")])
         style.configure("TCheckbutton", background=c["surface"], foreground=c["text"], padding=3)
         style.map("TCheckbutton", background=[("active", c["surface"])])
         style.configure("TEntry", fieldbackground=c["surface"], foreground=c["text"], bordercolor=c["border"], padding=5)
@@ -486,33 +491,55 @@ class SchedulerApp:
         selection_bar = ttk.Frame(table_frame)
         selection_bar.pack(fill="x", pady=(0, 5))
         ttk.Button(selection_bar, text="Select all", command=self.select_all_clips).pack(side="left")
-        ttk.Button(selection_bar, text="Unselect all", command=self.unselect_all_clips).pack(side="left", padx=(6, 12))
+        ttk.Button(
+            selection_bar, text="Delete from list", command=self.delete_selected_from_list,
+            style="Danger.TButton"
+        ).pack(side="left", padx=(6, 6))
+        ttk.Button(selection_bar, text="Unselect all", command=self.unselect_all_clips).pack(side="left", padx=(0, 12))
         self.clip_selection_var = tk.StringVar(value="0 selected")
         ttk.Label(selection_bar, textvariable=self.clip_selection_var, style="Sub.TLabel").pack(side="left")
-        columns = ("number", "queue_status", "file", "text_preview", "duration", "youtube", "facebook", "publish")
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="extended")
+        ttk.Label(
+            selection_bar,
+            text="Click one video to edit · Ctrl/Shift-click to select multiple",
+            style="Sub.TLabel"
+        ).pack(side="right")
+        columns = (
+            "number", "queue_status", "file", "title", "description",
+            "duration", "youtube", "facebook", "publish"
+        )
+        tree_shell = ttk.Frame(table_frame)
+        tree_shell.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(tree_shell, columns=columns, show="headings", selectmode="extended")
+        self.tree_path_by_id = {}
         self.tree.bind("<<TreeviewSelect>>", self.update_clip_selection_count, add="+")
         self.tree.heading("number", text="#")
         self.tree.heading("queue_status", text="Queue status")
         self.tree.heading("file", text="Video file")
-        self.tree.heading("text_preview", text="TXT text preview (matching file)")
+        self.tree.heading("title", text="Editable title")
+        self.tree.heading("description", text="Editable description")
         self.tree.heading("duration", text="Length")
         self.tree.heading("youtube", text="YouTube")
         self.tree.heading("facebook", text="Facebook")
         self.tree.heading("publish", text="Scheduled time")
         self.tree.column("number", width=40, minwidth=40, stretch=False, anchor="center")
         self.tree.column("queue_status", width=105, minwidth=100, stretch=False, anchor="center")
-        self.tree.column("file", width=230, anchor="w")
-        self.tree.column("text_preview", width=260, anchor="w")
-        self.tree.column("duration", width=58, anchor="center")
-        self.tree.column("youtube", width=90, anchor="center")
-        self.tree.column("facebook", width=90, anchor="center")
-        self.tree.column("publish", width=125, anchor="center")
-        yscroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=yscroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        yscroll.pack(side="right", fill="y")
+        self.tree.column("file", width=205, minwidth=160, anchor="w")
+        self.tree.column("title", width=245, minwidth=180, anchor="w")
+        self.tree.column("description", width=340, minwidth=220, anchor="w")
+        self.tree.column("duration", width=58, stretch=False, anchor="center")
+        self.tree.column("youtube", width=82, stretch=False, anchor="center")
+        self.tree.column("facebook", width=82, stretch=False, anchor="center")
+        self.tree.column("publish", width=132, stretch=False, anchor="center")
+        yscroll = ttk.Scrollbar(tree_shell, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(tree_shell, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        tree_shell.grid_rowconfigure(0, weight=1)
+        tree_shell.grid_columnconfigure(0, weight=1)
         self.tree.bind("<<TreeviewSelect>>", self.on_select, add="+")
+        self.tree.bind("<Double-1>", self.focus_metadata_editor, add="+")
         self.tree.tag_configure("error", foreground=self.colors["danger"])
         self.tree.tag_configure("scheduled", foreground=self.colors["success"])
         self.tree.tag_configure("published", foreground=self.colors["success"])
@@ -524,7 +551,8 @@ class SchedulerApp:
         edit_top = ttk.Frame(editor)
         edit_top.pack(fill="x")
         ttk.Label(edit_top, text="Title (max 100 characters):").pack(side="left")
-        ttk.Entry(edit_top, textvariable=self.selection_title_var).pack(side="left", fill="x", expand=True, padx=7)
+        self.selection_title_entry = ttk.Entry(edit_top, textvariable=self.selection_title_var)
+        self.selection_title_entry.pack(side="left", fill="x", expand=True, padx=7)
         ttk.Button(edit_top, text="Save metadata", command=self.save_selected_metadata).pack(side="right")
         ttk.Label(editor, text="Description").pack(anchor="w", pady=(6, 2))
         self.selection_desc = tk.Text(
@@ -1322,6 +1350,19 @@ class SchedulerApp:
             logger.warning("Unable to read matching TXT %s: %s", txt_path, exc)
             return "[UNREADABLE TXT]"
 
+    def get_selected_clip_paths(self):
+        """Return full paths for the selected rows, avoiding ambiguous same-name files."""
+        mapping = getattr(self, "tree_path_by_id", {})
+        return [mapping[item] for item in self.tree.selection() if item in mapping]
+
+    @staticmethod
+    def filter_queue_rows(rows, selected_paths=None):
+        """Use selected paths when supplied; an empty selection preserves whole-queue behaviour."""
+        selected = {str(path) for path in (selected_paths or [])}
+        if not selected:
+            return list(rows)
+        return [row for row in rows if str(row.get("path")) in selected]
+
     def select_all_clips(self):
         items = self.tree.get_children()
         if items:
@@ -1335,6 +1376,79 @@ class SchedulerApp:
     def update_clip_selection_count(self, _event=None):
         if hasattr(self, "clip_selection_var") and hasattr(self, "tree"):
             self.clip_selection_var.set(f"{len(self.tree.selection())} selected")
+
+    def delete_selected_from_list(self):
+        """Remove selected records from the local queue without touching source MP4/TXT files."""
+        paths = self.get_selected_clip_paths()
+        if not paths:
+            messagebox.showinfo("Select videos", "Select one or more videos in the list first.")
+            return
+        active = (
+            getattr(self, "worker", None),
+            getattr(self, "scan_worker", None),
+            getattr(self, "verification_worker", None),
+        )
+        if any(worker and worker.is_alive() for worker in active):
+            messagebox.showwarning(
+                "Queue is busy",
+                "Wait for scanning, scheduling, or publication verification to finish before removing queue entries."
+            )
+            return
+
+        # Chunk large selections to stay below SQLite's host-parameter limit.
+        scheduled = 0
+        scheduled_pages = 0
+        with self.db_lock:
+            for offset in range(0, len(paths), 500):
+                batch = paths[offset:offset + 500]
+                placeholders = ",".join("?" for _ in batch)
+                scheduled += self.conn.execute(
+                    f"SELECT COUNT(*) FROM clips WHERE path IN ({placeholders}) "
+                    "AND (yt_status IN ('Scheduled','Published') OR yt_video_id IS NOT NULL)",
+                    tuple(batch)
+                ).fetchone()[0]
+                scheduled_pages += self.conn.execute(
+                    f"SELECT COUNT(*) FROM facebook_page_jobs WHERE path IN ({placeholders}) "
+                    "AND (status IN ('Scheduled','Published') OR video_id IS NOT NULL)",
+                    tuple(batch)
+                ).fetchone()[0]
+
+        warning = (
+            f"Remove {len(paths)} selected video(s) from the local queue?\n\n"
+            "This removes only their queue records and per-Page status history. "
+            "The MP4 and TXT files will stay on disk. Any post already accepted by YouTube or Facebook "
+            "will remain scheduled/published on that platform; this action does not cancel it.\n\n"
+            f"Local records with accepted YouTube destinations: {scheduled}\n"
+            f"Local Facebook Page jobs with accepted destinations: {scheduled_pages}\n\n"
+            "Continue?"
+        )
+        if not messagebox.askyesno("Delete selected queue entries", warning):
+            return
+
+        removed = 0
+        try:
+            with self.db_lock:
+                self.conn.execute("BEGIN IMMEDIATE")
+                for path in paths:
+                    self.conn.execute("DELETE FROM facebook_page_jobs WHERE path=?", (path,))
+                    cur = self.conn.execute("DELETE FROM clips WHERE path=?", (path,))
+                    removed += cur.rowcount
+                self.conn.commit()
+        except Exception:
+            with self.db_lock:
+                self.conn.rollback()
+            raise
+
+        if self.selected_path in paths:
+            self.selected_path = None
+            self.selection_title_var.set("")
+            self.selection_desc.delete("1.0", "end")
+        for path in paths:
+            self.txt_preview_cache.pop(str(Path(path).with_suffix(".txt")), None)
+        self.log(
+            f"Removed {removed} video(s) from the local queue. Source MP4/TXT files were kept on disk."
+        )
+        self.refresh_table()
 
     @staticmethod
     def get_queue_row_status(row, page_job_map, selected_pages, include_youtube, include_facebook):
@@ -1398,11 +1512,10 @@ class SchedulerApp:
     def refresh_table(self):
         try:
             if hasattr(self, "tree"):
-                selected_paths = {
-                    self.tree.set(item, "file") for item in self.tree.selection()
-                }
+                selected_paths = set(self.get_selected_clip_paths())
                 for item in self.tree.get_children():
                     self.tree.delete(item)
+                self.tree_path_by_id = {}
 
                 rows = self.get_clips()
                 include_youtube = bool(self.youtube_var.get())
@@ -1450,7 +1563,9 @@ class SchedulerApp:
 
                 for index, (row, display_status) in enumerate(decorated):
                     duration = f"{row['duration']:.1f}s" if row.get("duration") else "—"
-                    text_preview = self.get_txt_preview(row["path"])
+                    description_preview = " ".join(str(row.get("description") or "").split())
+                    if len(description_preview) > 150:
+                        description_preview = description_preview[:147].rstrip() + "..."
                     tags = []
                     if display_status in {"⚠ Failed", "⚠ Skipped"}:
                         tags.append("error")
@@ -1463,13 +1578,15 @@ class SchedulerApp:
                     else:
                         tags.append("pending")
 
+                    item_id = str(index)
                     self.tree.insert(
-                        "", "end", iid=str(index),
+                        "", "end", iid=item_id,
                         values=(
                             index + 1,
                             display_status,
                             Path(row["path"]).name,
-                            text_preview,
+                            row["title"],
+                            description_preview,
                             duration,
                             row["yt_status"],
                             row["fb_status"],
@@ -1477,10 +1594,11 @@ class SchedulerApp:
                         ),
                         tags=tuple(tags)
                     )
+                    self.tree_path_by_id[item_id] = row["path"]
 
                 restored = [
                     item for item in self.tree.get_children()
-                    if self.tree.set(item, "file") in selected_paths
+                    if self.tree_path_by_id.get(item) in selected_paths
                 ]
                 if restored:
                     self.tree.selection_set(restored)
@@ -1511,8 +1629,12 @@ class SchedulerApp:
         if self.worker and self.worker.is_alive():
             messagebox.showinfo("Busy", "Wait for the current upload/scheduling task to finish or stop it first.")
             return
+        if self.scan_worker and self.scan_worker.is_alive():
+            messagebox.showinfo("Scan running", "A folder scan is already in progress.")
+            return
         self.save_settings()
-        threading.Thread(target=self._scan_worker, args=(folder,), daemon=True).start()
+        self.scan_worker = threading.Thread(target=self._scan_worker, args=(folder,), daemon=True)
+        self.scan_worker.start()
 
     def _scan_worker(self, folder):
         try:
@@ -1560,18 +1682,27 @@ class SchedulerApp:
     def on_select(self, _event=None):
         selection = self.tree.selection()
         if not selection:
+            self.selected_path = None
+            self.selection_title_var.set("")
+            self.selection_desc.delete("1.0", "end")
             return
-        filename = self.tree.set(selection[0], "file")
-        if not filename:
+        path = getattr(self, "tree_path_by_id", {}).get(selection[0])
+        if not path:
             return
-        rows = self.get_clips()
-        row = next((r for r in rows if Path(r["path"]).name == filename), None)
+        row = next((r for r in self.get_clips() if r["path"] == path), None)
         if not row:
             return
         self.selected_path = row["path"]
         self.selection_title_var.set(row["title"])
         self.selection_desc.delete("1.0", "end")
         self.selection_desc.insert("1.0", row["description"])
+
+    def focus_metadata_editor(self, _event=None):
+        """Double-click a row to focus its title editor."""
+        self.on_select()
+        if self.selected_path:
+            self.selection_title_entry.focus_set()
+            self.selection_title_entry.selection_range(0, "end")
 
     def save_selected_metadata(self):
         if not self.selected_path:
@@ -1593,9 +1724,9 @@ class SchedulerApp:
         self.refresh_table()
 
     def set_recommended_start(self):
-        rows = self.get_clips()
-        pending = [r for r in rows if r["yt_status"] != "Scheduled"] if self.youtube_var.get() else [
-            r for r in rows if r["fb_status"] != "Scheduled"
+        rows = self.filter_queue_rows(self.get_clips(), self.get_selected_clip_paths())
+        pending = [r for r in rows if r["yt_status"] not in {"Scheduled", "Published"}] if self.youtube_var.get() else [
+            r for r in rows if r["fb_status"] not in {"Scheduled", "Published"}
         ]
         start = suggested_start(len(pending), self.youtube_var.get())
         self.start_var.set(start.strftime("%Y-%m-%d %H:%M"))
@@ -1836,7 +1967,9 @@ class SchedulerApp:
         if self.worker and self.worker.is_alive():
             messagebox.showinfo("Already running", "A scheduling process is already running.")
             return
-        rows = self.get_clips()
+        all_rows = self.get_clips()
+        selected_paths = self.get_selected_clip_paths()
+        rows = self.filter_queue_rows(all_rows, selected_paths)
         if not rows:
             messagebox.showwarning("Queue empty", "Scan the clip folder first.")
             return
@@ -1971,8 +2104,13 @@ class SchedulerApp:
             "the next batch is delayed by 24 hours plus a 5-minute buffer.\n"
             if fb_enabled else ""
         )
+        scope = (
+            f"Selected videos: {len(rows)} clip(s)"
+            if selected_paths else f"Entire queue: {len(rows)} clip(s)"
+        )
         confirm = (
-            f"Schedule {len(pending_paths)} clip(s)?\n\n"
+            f"Schedule {len(pending_paths)} pending clip(s)?\n"
+            f"{scope}\n\n"
             f"First post: {start.strftime('%Y-%m-%d %H:%M')} local time\n"
             f"Interval: {interval} minutes\n"
             f"Platforms: {', '.join(x for x, ok in [('YouTube', yt_enabled), ('Facebook', fb_enabled)] if ok)}\n"
@@ -1998,7 +2136,7 @@ class SchedulerApp:
             args=(
                 yt_enabled, fb_enabled, self.youtube_ai_var.get(), self.facebook_ai_var.get(),
                 self.made_for_kids_var.get(), self.category_var.get().split(" - ")[0].strip(),
-                selected_pages,
+                selected_pages, tuple(pending_paths),
             ),
             daemon=True
         )
@@ -2008,9 +2146,12 @@ class SchedulerApp:
         self.stop_event.set()
         self.log("Stop requested. The current file upload will be allowed to finish.")
 
-    def _schedule_worker(self, yt_enabled, fb_enabled, yt_ai, fb_ai, made_for_kids, category_id, selected_pages):
+    def _schedule_worker(
+        self, yt_enabled, fb_enabled, yt_ai, fb_ai, made_for_kids,
+        category_id, selected_pages, clip_paths=None
+    ):
         try:
-            rows = self.get_clips()
+            rows = self.filter_queue_rows(self.get_clips(), clip_paths)
             self.log("Queue processing started.")
             for row in rows:
                 if self.stop_event.is_set():

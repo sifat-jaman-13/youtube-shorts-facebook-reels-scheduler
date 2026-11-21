@@ -1,199 +1,322 @@
+<div align="center">
+
+<img src="assets/scarclipscheduler-banner.svg" alt="ScarClipScheduler — YouTube Shorts and Facebook Reels publishing scheduler" width="100%">
+
 # ScarClipScheduler
 
-**A Windows desktop app for scheduling YouTube Shorts and Facebook Page Reels from one local queue.**
+**A Windows desktop scheduler for YouTube Shorts and Facebook Page Reels.**
 
-ScarClipScheduler scans rendered MP4 clips and their matching TXT metadata, lets you review and edit every title and description, then schedules selected clips to a YouTube channel and one or more Facebook Pages. It keeps the queue, credentials, and working files on your Windows PC.
+[![Windows](https://img.shields.io/badge/Windows-10%2B-2563EB?logo=windows&logoColor=white)](#install-the-windows-exe)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](#install-the-windows-exe)
+[![Platform APIs](https://img.shields.io/badge/Publishing-Official%20APIs-0F766E)](#connect-your-platforms)
 
-> This project is an API-based scheduler. It does not automate browser clicks to upload videos. Platform APIs, permissions, quotas, account status, and publishing eligibility determine what can be scheduled.
+[Features](#features) · [Install](#install-the-windows-exe) · [API setup](#connect-your-platforms) · [Usage](#manage-your-clip-queue) · [Troubleshooting](#troubleshooting)
+
+</div>
+
+---
+
+## Overview
+
+ScarClipScheduler takes rendered MP4 clips and their matching TXT metadata, lets you review every title and description, then schedules selected clips to a connected YouTube channel and one or more Facebook Pages.
+
+It uses the official Google YouTube Data API and Meta Graph API. It does not simulate browser clicks, scrape pages, or bypass platform authorization. Platform permissions, quotas, account eligibility, and App Review decisions still apply.
 
 ## Features
 
-- **One queue for two platforms:** schedule YouTube videos and Facebook Page Reels from the same clip list.
-- **Multi-Page Facebook publishing:** select several Pages and track each Page's result separately.
-- **TXT-based metadata:** pair each `.mp4` with a same-name `.txt`; the first non-empty line is the title and the remaining text becomes the description.
-- **Review before scheduling:** edit titles/descriptions in the queue without rewriting the original metadata file.
-- **Queue timeline:** choose a starting time and schedule posts at the configured interval (five minutes by default).
-- **Per-clip status:** Pending, Partial, Scheduled, Published, Uploaded, Failed, or Skipped. Completed statuses are visually marked and sorted below pending work.
-- **Publication verification:** check platform-side status after the planned publication time instead of treating an accepted schedule request as a published post.
-- **Safer file organization:** separates accepted scheduled files from unfinished source files and provides a final manual-review folder after the complete recorded queue has been verified.
-- **Local-first storage:** the queue database and authorization data are stored under your Windows user profile.
+| Feature | What it does |
+|---|---|
+| One publishing queue | Manage YouTube Shorts and Facebook Page Reels from one window |
+| Multi-Page Facebook | Publish to multiple selected Pages and track each Page independently |
+| Select individual videos | Click one row to select a single clip; Ctrl/Shift-click to select several |
+| Select all / unselect all | Quickly change the selected set |
+| Delete from list | Remove selected entries and their local queue history without deleting MP4/TXT files |
+| Editable metadata | View each video's title and description in the list; edit the selected video's fields before upload |
+| TXT pairing | Import the first non-empty TXT line as the title and the remaining text as the description |
+| Scheduled publishing | Choose a start time and posting interval |
+| Publication verification | Check the platform-side status after the scheduled time |
+| Safe file organization | Separate scheduled, uploaded, pending, and failed local files |
+| Local-first data | Keep queue data and authorization tokens in your Windows user profile |
 
-## Requirements
+### Selection and scheduling behaviour
 
-- Windows 10 or later.
-- Python 3.11 or newer, available as `python` on PATH.
-- Internet access for Google and Meta authentication, API requests, and video uploads.
-- A Google Cloud project with the YouTube Data API v3 enabled.
-- A Meta developer app with Page publishing access to the Pages you intend to use.
-- MP4 clips and matching TXT files. The app uses FFprobe when available to validate Facebook Reel format.
+- **Click one video row** to select that single clip and load its title/description into the editor.
+- Use **Ctrl-click** or **Shift-click** to select multiple videos.
+- **Select all** selects every detected queue entry. **Unselect all** clears the selection.
+- **Delete from list** removes only the selected database entries. The local video and TXT files remain on disk. Existing posts already accepted by a platform are not cancelled.
+- When one or more rows are selected, **Schedule queue** operates on that selection only. When nothing is selected, the entire queue is used.
+- Double-click a row to focus its title editor. Click **Save metadata** to save the title and description to the local queue database.
 
-## Install and launch
+## Install the Windows EXE
 
-1. Download or clone this repository to a folder on your PC.
-2. Install Python 3.11 or newer and enable **Add Python to PATH** during installation.
-3. Double-click **Start ScarClipScheduler.bat**.
-4. On first launch, the batch file creates a local `.venv` and installs the packages in `requirements.txt`.
-5. Open **Connections** and connect the platforms you plan to use.
+**Recommended:** download the EXE from the repository:
 
-The launcher runs the application with its isolated virtual environment. You do not need to activate the environment manually.
+[Download ScarClipScheduler.exe](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/raw/refs/heads/main/dist/ScarClipScheduler.exe)
 
-### Run from PowerShell
+The EXE is a small Windows terminal bootstrapper. It embeds the application source and requirements file; it does not bundle a private Python runtime or platform credentials.
 
-```powershell
+1. Download ScarClipScheduler.exe.
+2. Double-click it. A terminal window opens and checks for Python 3.11 or newer.
+3. If Python 3.12 is not found, the bootstrapper attempts a per-user installation with Windows Package Manager (winget). It does not require an administrator account when the package manager supports user scope.
+4. It creates an isolated .venv under %LOCALAPPDATA%\Programs\ScarClipScheduler and installs the packages from requirements.txt over the internet.
+5. It launches ScarClipScheduler. Keep the terminal open while the desktop app is running.
+
+The EXE is currently unsigned; Windows SmartScreen may show a warning on first launch. Only download it from this repository and review the source/build workflow if Windows asks you to verify the publisher.
+
+The setup is repeated only when the embedded app version changes or required imports are missing. Your queue, settings, Google tokens, Meta tokens, and logs remain in:
+
+~~~text
+%LOCALAPPDATA%\ScarClipScheduler\
+~~~
+
+The installed app source and virtual environment are stored separately:
+
+~~~text
+%LOCALAPPDATA%\Programs\ScarClipScheduler\
+~~~
+
+### If winget is unavailable
+
+Install the official Python 3.12 Windows installer from [python.org](https://www.python.org/downloads/windows/). Enable the Python launcher (and, if offered, **Add Python to PATH**). Run the ScarClipScheduler EXE again.
+
+### Developer / source install
+
+The repository includes a batch launcher for running from source:
+
+~~~powershell
+git clone https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler.git
+cd youtube-shorts-facebook-reels-scheduler
+.\Start ScarClipScheduler.bat
+~~~
+
+The batch launcher creates .venv, installs requirements.txt, and starts app.py. Or run the setup manually:
+
+~~~powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python app.py
-```
+~~~
 
-## Connect YouTube
+## Connect your platforms
 
-ScarClipScheduler uses the official **YouTube Data API v3** and Google OAuth 2.0. Upload access is authorized through your Google account; do not give the app your Google password.
+You do not paste API keys into this README or into ChatGPT. Create your own credentials in the official developer dashboards and enter them only in ScarClipScheduler on your own PC.
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/) and create or select a project.
-2. Open **APIs & Services → Library** and enable **YouTube Data API v3**.
-3. Configure the OAuth consent screen and add your Google account as a test user while the app is in testing.
-4. Open **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-5. Choose **Desktop app**, create the client, and download its JSON file.
-6. In ScarClipScheduler, open **Connections → YouTube**, browse to that JSON file, and click **Connect YouTube**.
-7. Sign in to the Google account that owns the intended channel and approve the requested YouTube permissions.
-8. Confirm the connected channel shown in the app is the correct one.
+### YouTube Shorts — Google Cloud OAuth
 
-**Important OAuth note:** Google documents that refresh tokens for an External OAuth consent screen left in **Testing** expire after seven days when the app requests scopes beyond basic identity/profile scopes. This app requests YouTube scopes. For longer-term use, review Google's publishing-status and verification requirements and move the OAuth app out of Testing where appropriate. [Google OAuth token lifetime guidance](https://developers.google.com/identity/protocols/oauth2#expiration).
+ScarClipScheduler uploads videos and reads the connected channel, so it uses **OAuth 2.0 Desktop App credentials**. A simple Google API key is not enough to authorize uploads or access your private channel.
 
-**YouTube scheduling behaviour:** scheduled videos are uploaded as private with a `status.publishAt` time. Google's API only allows `publishAt` when the video's privacy status is private and the video has not previously been published. See the [YouTube video status resource](https://developers.google.com/youtube/data/reference/rest/v3/videos).
+| Credential / setting | Where to get it | What to do |
+|---|---|---|
+| Google Cloud project | [Google Cloud Console](https://console.cloud.google.com/) | Create a project or select an existing one |
+| YouTube Data API v3 | APIs & Services → API Library | Search for YouTube Data API v3 and enable it |
+| OAuth consent / Google Auth Platform | Google Cloud Console → Google Auth Platform | Configure app name, audience, and contact details; add your Google account as a test user while testing |
+| OAuth Client ID | Google Auth Platform → Clients / APIs & Services → Credentials → Create credentials | Choose Desktop app |
+| Client JSON | OAuth client entry | Download the JSON file; keep it private |
 
-**Quota:** the current default YouTube Data API quota has a separate `videos.insert` upload bucket of 100 calls per day, resetting at midnight Pacific Time. ScarClipScheduler accounts for the daily upload allowance and spaces the queue. Check your own Google Cloud quota page because project allocations and policy can change. [Official quota calculator](https://developers.google.com/youtube/data/determine_quota_cost).
+**Connect in the app**
 
-## Connect Facebook Pages
+1. Open **Connections → YouTube**.
+2. Browse to the downloaded Desktop App client JSON file.
+3. Click **Connect YouTube**.
+4. Sign in to the Google account that owns the intended channel and approve the requested YouTube permissions.
+5. Check that the connected channel name shown by the app is correct.
 
-ScarClipScheduler uses the **Meta Graph API** to publish Reels to Facebook Pages. The app is configured for Graph API `v27.0`.
+Requested OAuth scopes:
 
-1. Open [Meta for Developers](https://developers.facebook.com/apps/) and create a Meta app for your Page-publishing use case.
-2. Add the relevant Page-management / Facebook Login capabilities in the app dashboard.
-3. Configure the OAuth redirect URI exactly as:
-   `http://localhost:8765/callback`
-4. Ensure the app can request these permissions:
-   - `pages_show_list` — find Pages available to the signed-in account.
-   - `pages_manage_posts` — publish and schedule Page content.
-   - `pages_read_engagement` — read Page publishing/status information.
-   - `business_management` — discover Pages owned by the selected Business Portfolio.
-5. In ScarClipScheduler → **Connections → Facebook**, enter your Meta **App ID**, **Business Portfolio ID**, and **App Secret**. Enter the App Secret only in the app on your own PC.
-6. Click **Connect & Load Business Pages**, complete Facebook authorization, and approve the requested access.
-7. Select the Facebook Pages that should receive the clips. Each selected Page is handled as a separate destination with its own result.
+- **youtube.upload** — upload/manage the channel's videos.
+- **youtube.readonly** — read the authenticated channel/video status.
 
-The Facebook account used to connect must have the Page task/access needed to create content on each selected Page. The Page Videos API documents the `CREATE_CONTENT` task and the `pages_manage_posts`, `pages_read_engagement`, and `pages_show_list` permissions for publishing. See [Meta Page Videos](https://developers.facebook.com/docs/graph-api/reference/page/videos/) and [Page Feed publishing requirements](https://developers.facebook.com/docs/graph-api/reference/page/feed/).
+**Testing-mode token expiry:** Google notes that refresh tokens for External OAuth apps left in Testing can expire after seven days when non-basic scopes are requested. For ongoing use, review Google's publishing and verification requirements and use the appropriate consent-screen publishing status. See [Google OAuth 2.0 documentation](https://developers.google.com/identity/protocols/oauth2#expiration).
 
-**Development mode:** while a Meta app is in Development mode, access is limited to people with a role on the app. If you intend to let people outside the app's roles use your integration, review Meta's Standard/Advanced Access and App Review requirements before switching the app to production. See [Meta's app development lifecycle](https://developers.facebook.com/docs/apps/managing-development-cycle/) and [App Review overview](https://developers.facebook.com/docs/resp-plat-initiatives/app-review/introduction/).
+Official guide: [YouTube Data API authorization](https://developers.google.com/youtube/data/guides/authentication).
 
-**Facebook scheduling window:** Meta's current Page Videos reference documents scheduled publication from 10 minutes to 6 months ahead. ScarClipScheduler deliberately applies a narrower internal planning window (at least 15 minutes ahead and no more than 29 days) as an application-side guardrail. Platform policies and eligibility can change; check the Meta dashboard if a request is rejected.
+### Facebook Page Reels — Meta Developers
 
-## Prepare the clip folder
+The Facebook integration uses a Meta developer app and obtains Page access tokens through the in-app OAuth flow. You do not need to manually paste a Page token into the queue.
 
-1. In **Connections / Publishing queue**, set the folder containing your rendered clips.
-2. Keep each video and its metadata file together, for example:
+| Credential / setting | Where to get it | What to do |
+|---|---|---|
+| Meta App ID | [Meta for Developers](https://developers.facebook.com/apps/) → your app → App settings → Basic | Copy the App ID |
+| Meta App Secret | The same App settings → Basic page | Reveal and copy it; keep it private |
+| Business Portfolio ID | [Meta Business Suite](https://business.facebook.com/) → Business settings → Business info | Copy the Business Portfolio ID that owns the Pages |
+| OAuth redirect URI | Meta app → Facebook Login / OAuth settings | Add the exact URI shown below |
+| Page access | Facebook account and Business Portfolio | The connecting account must have permission to create Page content |
 
-```text
-source/
+Configure this exact redirect URI in the Meta app:
+
+~~~text
+http://localhost:8765/callback
+~~~
+
+The current app requests these permissions:
+
+| Permission | Purpose |
+|---|---|
+| **pages_show_list** | List Pages available to the connected account |
+| **pages_manage_posts** | Create and schedule Page content |
+| **pages_read_engagement** | Read Page publishing/status information |
+| **business_management** | Discover Pages belonging to the selected Business Portfolio |
+
+**Connect in the app**
+
+1. Open **Connections → Facebook**.
+2. Enter the Meta App ID, App Secret, and Business Portfolio ID.
+3. Click **Connect & Load Business Pages**.
+4. Complete the Facebook login/consent page in your browser.
+5. Select the Pages that should receive each Reel.
+
+The app stores the credentials and access tokens locally in your Windows user profile. Never share the App Secret or tokens. Meta may require App Review and Advanced Access for people who are not assigned a role in your developer app. See [Meta App Review](https://developers.facebook.com/docs/resp-plat-initiatives/app-review/introduction/) and the [Page API reference](https://developers.facebook.com/docs/graph-api/reference/page/).
+
+## Prepare and manage clips
+
+### Expected folder structure
+
+StreamSnip AI and other editors can export a matching TXT sidecar beside each MP4:
+
+~~~text
+clips/
   highlight_001.mp4
   highlight_001.txt
   highlight_002.mp4
   highlight_002.txt
-```
+~~~
 
-3. Click **Scan clips**.
-4. Check the title and description for every detected clip. You can edit them in the queue.
-5. Select the YouTube channel, Facebook Pages, or both.
-6. Choose the starting date/time and confirm the queue interval.
-7. Confirm that you own the footage or have the rights and permission to publish it.
-8. Review the queue, then click **Schedule queue**.
+The first non-empty line in the TXT file is used as the title. Remaining lines become the description. Example:
 
-A matching TXT file should be UTF-8 text with the title on its first non-empty line and the description below it. A simple example:
-
-```text
+~~~text
 The Most Unexpected Comeback
 
 An incredible moment from the stream.
-#shorts #gaming #clips
-```
+#Shorts #Gaming #Clips
+~~~
 
-## Scheduling, status, and safe cleanup
+### Queue workflow
 
-- A successful API response means **Scheduled** or **Uploaded**, not that the post is already public.
-- The app checks publication status through the platform APIs after the scheduled time, allowing a five-minute grace period.
-- Automatic status checks run after startup and every 15 minutes while the app is open. You can also use **Check publication status** from the queue.
-- If the PC is off when a post becomes due, a schedule already accepted by the platform can still publish. The app resumes local verification when it is opened again.
-- Accepted scheduled MP4/TXT pairs are moved to the source folder's `schedule` subfolder. Pending, failed, skipped, and partially accepted items remain available for review.
-- The `You can delete these clips now` folder is a queue-wide manual-review area. The app waits until every recorded destination across the scheduled timeline is verified as Published before moving the completed batch there.
-- **ScarClipScheduler does not automatically delete your videos.** Inspect the public posts and manually delete local files only when you are sure you no longer need them.
-- An `uploaded` folder is created for the Uploaded-only workflow/status.
+1. Choose the folder containing your rendered MP4 clips.
+2. Click **Scan clips**.
+3. Review the detected videos and their title/description columns.
+4. Click a single video to edit it, or select a group with Ctrl/Shift-click.
+5. Use **Save metadata** to apply the selected video's edits.
+6. Choose YouTube, Facebook, or both; select the Facebook Pages; set the first post time and interval.
+7. Confirm you have the rights to publish the footage.
+8. Select the videos you want scheduled, then click **Schedule queue**. Leave the list unselected to schedule the whole queue.
+
+### Delete from list — important distinction
+
+**Delete from list is not file deletion.** It removes the selected clip records from ScarClipScheduler's local database and removes their per-Page queue history. The actual MP4/TXT files remain untouched in the source folder.
+
+If a post was already accepted by YouTube or Facebook, removing its local record does not cancel that platform-side schedule. The confirmation dialog displays how many selected entries have accepted destinations before it removes them.
+
+## Scheduling and status
+
+- The app uploads/schedules through the official platform APIs.
+- An accepted request is **Scheduled**, not proof the post is already public.
+- Scheduled YouTube videos are initially uploaded as private with a publishAt time.
+- The app checks status after the due time and has an automatic background verification cycle while open.
+- If Windows is off at the publication time, a schedule already accepted by the platform can still publish; local status verification resumes when the app is opened again.
+- Accepted MP4/TXT pairs may be moved into the schedule folder. Failed, pending, and partial items remain reviewable.
+- The **You can delete these clips now** folder is a manual-review location. The app does not automatically delete videos.
+
+### Limits and format checks
+
+| Platform | Application-side behaviour |
+|---|---|
+| YouTube | The app spaces upload requests around the configured project quota and schedules the video with publishAt |
+| Facebook Page Reels | The app spaces submissions per Page and checks the Reel format before upload |
+| Facebook format | Conservative pre-check expects vertical 9:16 video and 4–60 seconds |
+| Scheduled status | Platform acceptance is tracked separately from later confirmed publication |
+
+Quotas, limits, and publishing eligibility may vary by project, account, and platform policy. Check your own developer dashboards when an API request is rejected.
 
 ## Local data and security
 
-The app stores its operational data under:
+App data is stored under:
 
-```text
+~~~text
 %LOCALAPPDATA%\ScarClipScheduler\
-```
+~~~
 
-This location contains the queue database, settings, Google OAuth client/authorization data, YouTube token data, and logs. Treat the folder as private.
+This folder may contain the queue database, settings, Google OAuth client information, YouTube refresh tokens, Meta App Secret, Page access tokens, and logs.
 
-- Never commit OAuth client JSON, refresh tokens, Meta App Secrets, Page access tokens, queue databases, or application logs.
-- Do not paste credentials into GitHub issues, screenshots, chat messages, or README files.
+- Never commit OAuth JSON files, tokens, App Secrets, databases, or logs.
+- Do not paste credentials into GitHub issues, screenshots, support messages, or chats.
+- Restrict access to your Windows user account and use disk encryption where appropriate.
 - If a credential is exposed, revoke or rotate it in the relevant Google or Meta dashboard.
-- The repository's `.gitignore` excludes local environments, backups, runtime state, logs, credentials, and generated videos.
+- The repository .gitignore excludes local state and credential files.
 
-## Run tests
+## Test and build from source
 
-The repository includes offline regression tests for queue parsing, scheduling-slot allocation, per-destination statuses, database/file moves, rollback, and the publication-confirmed cleanup gate.
+Install development dependencies and run the regression suite:
 
-```powershell
+~~~powershell
 python -m pip install -r requirements.txt
 python -m py_compile app.py
 python -m unittest discover -s tests -v
-```
+~~~
 
-The tests use temporary folders and an in-memory SQLite database. They do not upload or publish videos.
+Build the single-file Windows terminal bootstrapper on Windows with .NET Framework 4.x:
+
+~~~powershell
+.\build_windows_exe.ps1
+~~~
+
+The script compiles bootstrapper/Program.cs with the Windows C# compiler and embeds app.py plus requirements.txt into dist/ScarClipScheduler.exe. Python and pip packages are installed by the EXE at first launch; they are not bundled into it.
+
+## Project structure
+
+~~~text
+youtube-shorts-facebook-reels-scheduler/
+├── app.py
+├── requirements.txt
+├── Start ScarClipScheduler.bat
+├── build_windows_exe.ps1
+├── bootstrapper/
+│   └── Program.cs
+├── assets/
+│   └── scarclipscheduler-banner.svg
+├── dist/
+│   └── ScarClipScheduler.exe
+├── tests/
+│   └── test_scheduler.py
+└── .github/
+    └── workflows/
+        ├── tests.yml
+        └── build-exe.yml
+~~~
 
 ## Troubleshooting
 
 | Problem | What to check |
 |---|---|
-| YouTube authorization fails | Re-check the OAuth Desktop client JSON, consent-screen test users, requested scopes, and connected Google account. |
-| YouTube refresh token stops working | Check whether the OAuth consent screen is still in Testing and review Google's seven-day testing-token rule. |
-| Facebook Pages do not load | Check the Business Portfolio ID, app role, Page access, `business_management`, and `pages_show_list`; reconnect to refresh permissions. |
-| Facebook permission error | Verify `pages_manage_posts`, `pages_read_engagement`, Page `CREATE_CONTENT` access, and Meta App Review/Access level. |
-| Facebook OAuth callback fails | Ensure port 8765 is available and the redirect URI matches exactly. |
-| Video is rejected as a Reel | Confirm a vertical 9:16 MP4 in the app's supported conservative duration range (4–60 seconds). |
-| Upload seems stalled | Keep the app open, check the internet connection, and inspect the app log. Do not blindly reset or retry an item until you have checked whether the platform accepted it. |
-
-Detailed log: `%LOCALAPPDATA%\ScarClipScheduler\app.log`.
-
-## Project files
-
-```text
-ScarClipScheduler/
-  app.py
-  requirements.txt
-  Start ScarClipScheduler.bat
-  README.md
-```
-
-## Responsible publishing
-
-Only publish clips you own or are licensed/authorized to distribute. Giving credit does not automatically grant permission. Review music, gameplay, streamer, and third-party rights as well as each platform's reused-content and monetization policies. ScarClipScheduler is a scheduling utility, not a rights or policy checker.
+| EXE cannot install Python | Install Python 3.12 from [python.org](https://www.python.org/downloads/windows/) or make sure Windows Package Manager (winget) is available |
+| EXE package installation fails | Check internet access, proxy settings, and whether pip install -r requirements.txt succeeds |
+| YouTube authorization fails | Check the Desktop OAuth client JSON, consent-screen test users, enabled YouTube Data API v3, and connected Google account |
+| YouTube token stops refreshing | Review Google's OAuth publishing status and the seven-day testing-token rule |
+| Facebook Pages do not load | Check App ID, App Secret, Business Portfolio ID, Page access, and business_management / pages_show_list permissions |
+| Facebook permission error | Check pages_manage_posts, pages_read_engagement, Page content task access, and Meta App Review / Access level |
+| Facebook OAuth callback fails | Ensure port 8765 is available and the redirect URI matches exactly |
+| Reel is rejected | Check vertical 9:16 format, video duration, Page permissions, and the Meta API response |
+| Upload seems stalled | Keep the app open, check internet access, then inspect %LOCALAPPDATA%\ScarClipScheduler\app.log |
 
 ## Platform documentation
 
 - [YouTube Data API authorization](https://developers.google.com/youtube/data/guides/authentication)
-- [YouTube Data API video upload](https://developers.google.com/youtube/data/guides/uploading_a_video)
-- [YouTube API quota](https://developers.google.com/youtube/data/determine_quota_cost)
-- [Google OAuth 2.0 refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)
-- [Meta Page Videos API](https://developers.facebook.com/docs/graph-api/reference/page/videos/)
-- [Meta Page Feed API](https://developers.facebook.com/docs/graph-api/reference/page/feed/)
+- [YouTube Data API upload guide](https://developers.google.com/youtube/data/guides/uploading_a_video)
+- [Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2)
+- [Meta Pages API](https://developers.facebook.com/docs/graph-api/reference/page/)
+- [Meta Page publishing](https://developers.facebook.com/docs/graph-api/reference/page/feed/)
 - [Meta App Review](https://developers.facebook.com/docs/resp-plat-initiatives/app-review/introduction/)
 
 ---
 
-**ScarClipScheduler** · Python desktop automation for YouTube Shorts and Facebook Page Reels scheduling.
+<div align="center">
+
+**Created by Sifat Jaman**
+
+Built with assistance from **ChatGPT (OpenAI)**.
+
+ScarClipScheduler is a desktop publishing utility. Users remain responsible for rights, permissions, platform policies, and the content they schedule.
+
+</div>

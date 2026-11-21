@@ -361,5 +361,105 @@ class SchedulerRegressionTests(unittest.TestCase):
             self.assertEqual(finish_data["scheduled_publish_time"], str(int(publish_at.timestamp())))
             self.assertEqual(finish_data["is_ai_generated"], "true")
 
+    def test_single_and_multi_selection_filter_the_schedule_scope(self):
+        rows = [
+            {"path": "one.mp4", "title": "One"},
+            {"path": "two.mp4", "title": "Two"},
+            {"path": "three.mp4", "title": "Three"},
+        ]
+        self.assertEqual(
+            [row["path"] for row in app.SchedulerApp.filter_queue_rows(rows, ["two.mp4"])],
+            ["two.mp4"]
+        )
+        self.assertEqual(
+            [row["path"] for row in app.SchedulerApp.filter_queue_rows(rows, ["one.mp4", "three.mp4"])],
+            ["one.mp4", "three.mp4"]
+        )
+        # No highlighted rows retains the original whole-queue operation.
+        self.assertEqual(app.SchedulerApp.filter_queue_rows(rows, []), rows)
+
+    def test_selected_tree_rows_resolve_to_full_video_paths(self):
+        instance = app.SchedulerApp.__new__(app.SchedulerApp)
+        instance.tree = SimpleNamespace(selection=lambda: ("row-1",))
+        instance.tree_path_by_id = {
+            "row-1": r"C:\\clips\\first.mp4",
+            "row-2": r"D:\\clips\\first.mp4",
+        }
+        self.assertEqual(instance.get_selected_clip_paths(), [r"C:\\clips\\first.mp4"])
+        instance.tree = SimpleNamespace(selection=lambda: ("row-1", "row-2"))
+        self.assertEqual(
+            set(instance.get_selected_clip_paths()),
+            {r"C:\\clips\\first.mp4", r"D:\\clips\\first.mp4"}
+        )
+
+    def test_delete_from_list_removes_queue_records_but_keeps_video_and_txt_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "keep-this.mp4"
+            txt = root / "keep-this.txt"
+            video.write_bytes(b"video stays")
+            txt.write_text("Title\\nDescription", encoding="utf-8")
+
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.Lock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.db_execute(
+                "INSERT INTO clips(path,title,description) VALUES(?,?,?)",
+                (str(video), "Title", "Description")
+            )
+            instance.db_execute(
+                "INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status) VALUES(?,?,?,?,?)",
+                (str(video), "page-a", "Page A", self.now.isoformat(), "Pending")
+            )
+            instance.tree = SimpleNamespace(selection=lambda: ("row-0",))
+            instance.tree_path_by_id = {"row-0": str(video)}
+            instance.worker = None
+            instance.scan_worker = None
+            instance.verification_worker = None
+            instance.selected_path = str(video)
+            instance.selection_title_var = SimpleNamespace(set=lambda _value: None)
+            instance.selection_desc = SimpleNamespace(delete=lambda *_args: None)
+            instance.txt_preview_cache = {}
+            instance.log = lambda _message: None
+            instance.refresh_table = lambda: None
+
+            with patch.object(app.messagebox, "askyesno", return_value=True):
+                instance.delete_selected_from_list()
+
+            self.assertEqual(instance.get_clips(), [])
+            self.assertIsNone(instance.get_fb_job(str(video), "page-a"))
+            self.assertTrue(video.is_file())
+            self.assertTrue(txt.is_file())
+            self.assertIsNone(instance.selected_path)
+            instance.conn.close()
+
+    def test_selected_video_title_and_description_are_saved_to_its_queue_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "editable.mp4")
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.Lock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.db_execute(
+                "INSERT INTO clips(path,title,description) VALUES(?,?,?)",
+                (path, "Old title", "Old description")
+            )
+            instance.selected_path = path
+            instance.selection_title_var = SimpleNamespace(get=lambda: "A new editable title")
+            instance.selection_desc = SimpleNamespace(
+                get=lambda *_args: "The matching description is edited independently."
+            )
+            instance.log = lambda _message: None
+            instance.refresh_table = lambda: None
+
+            instance.save_selected_metadata()
+            row = instance.get_clips()[0]
+            self.assertEqual(row["title"], "A new editable title")
+            self.assertEqual(row["description"], "The matching description is edited independently.")
+            instance.conn.close()
+
 if __name__ == "__main__":
     unittest.main()

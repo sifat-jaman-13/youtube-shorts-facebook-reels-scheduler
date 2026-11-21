@@ -44,6 +44,6 @@ uploaded/
 schedule/
 You can delete these clips now/
 
-# Build output
+# Build output (the release EXE is explicitly force-added to Git)
 build/
 dist/

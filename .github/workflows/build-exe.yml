@@ -1,0 +1,44 @@
+name: Windows EXE package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "requirements.txt"
+      - "bootstrapper/**"
+      - "build_windows_exe.ps1"
+      - ".github/workflows/build-exe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-exe:
+    name: Build terminal bootstrapper
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Compile Windows EXE
+        shell: powershell
+        run: .\build_windows_exe.ps1
+
+      - name: Set up Python for embedded-package verification
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify embedded app package
+        shell: powershell
+        run: .\dist\ScarClipScheduler.exe --verify-package
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScarClipScheduler-Windows
+          path: dist/ScarClipScheduler.exe
+          if-no-files-found: error
+          retention-days: 30
