@@ -65,7 +65,8 @@ class SchedulerRegressionTests(unittest.TestCase):
 
     def test_youtube_allocator_moves_to_next_pacific_day_when_existing_day_is_full(self):
         pacific = ZoneInfo("America/Los_Angeles")
-        first = self.now.astimezone(pacific) + timedelta(hours=1)
+        quota_now = datetime(2026, 11, 22, 3, 0, tzinfo=pacific)
+        first = quota_now + timedelta(hours=1)
         day = first.date()
         rows = [
             {"path": f"accepted_{index}.mp4", "yt_status": "Scheduled",
@@ -73,9 +74,9 @@ class SchedulerRegressionTests(unittest.TestCase):
             for index in range(100)
         ]
         rows.append({"path": "retry.mp4", "yt_status": "Error", "publish_at": None})
-        with patch.object(app, "local_now", return_value=self.now):
+        with patch.object(app, "local_now", return_value=quota_now):
             slots = app.allocate_youtube_publish_slots(
-                rows, first.astimezone(self.now.tzinfo), 5, now=self.now
+                rows, first, 5, now=quota_now
             )
         assigned = datetime.fromisoformat(slots["retry.mp4"]).astimezone(pacific)
         self.assertGreater(assigned.date(), day)
