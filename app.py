@@ -25,7 +25,7 @@ APP_VERSION = "1.1.8"
 GRAPH_VERSION = "v27.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 DEFAULT_FOLDER = str(Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "StreamSnip AI" / "source" / "out")
-DEFAULT_PAGE_ID = "61577233201818"
+DEFAULT_PAGE_ID = ""
 YT_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
@@ -175,7 +175,7 @@ class SchedulerApp:
         self.settings = read_json(SETTINGS_PATH, {
             "folder": DEFAULT_FOLDER,
             "page_id": DEFAULT_PAGE_ID,
-            "business_id": "377148671938234",
+            "business_id": "",
             "fb_selected_page_ids": [],
             "client_secrets": "",
             "meta_app_id": "",
@@ -207,7 +207,7 @@ class SchedulerApp:
         self.made_for_kids_var = tk.BooleanVar(value=self.settings.get("made_for_kids", False))
         self.rights_confirm_var = tk.BooleanVar(value=False)
         self.page_id_var = tk.StringVar(value=self.settings.get("page_id", DEFAULT_PAGE_ID))
-        self.business_id_var = tk.StringVar(value=self.settings.get("business_id", "377148671938234"))
+        self.business_id_var = tk.StringVar(value=self.settings.get("business_id", ""))
         self.fb_page_vars = {}
         self.client_secrets_var = tk.StringVar(value=self.settings.get("client_secrets", ""))
         self.meta_app_id_var = tk.StringVar(value=self.settings.get("meta_app_id", ""))
@@ -505,7 +505,7 @@ class SchedulerApp:
             wraplength=850
         ).pack(anchor="w", pady=(0, 12))
 
-        yt = ttk.LabelFrame(tab, text="YouTube / ScarClipFarm", padding=10)
+        yt = ttk.LabelFrame(tab, text="YouTube channel", padding=10)
         yt.pack(fill="x", pady=(0, 12))
         ttk.Label(yt, text="OAuth Desktop client JSON file (client_secrets.json):").grid(row=0, column=0, sticky="w")
         ttk.Entry(yt, textvariable=self.client_secrets_var).grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=4)
