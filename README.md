@@ -144,6 +144,18 @@ This location contains the queue database, settings, Google OAuth client/authori
 - If a credential is exposed, revoke or rotate it in the relevant Google or Meta dashboard.
 - The repository's `.gitignore` excludes local environments, backups, runtime state, logs, credentials, and generated videos.
 
+## Run tests
+
+The repository includes offline regression tests for queue parsing, scheduling-slot allocation, per-destination statuses, database/file moves, rollback, and the publication-confirmed cleanup gate.
+
+```powershell
+python -m pip install -r requirements.txt
+python -m py_compile app.py
+python -m unittest discover -s tests -v
+```
+
+The tests use temporary folders and an in-memory SQLite database. They do not upload or publish videos.
+
 ## Troubleshooting
 
 | Problem | What to check |
