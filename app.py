@@ -118,6 +118,75 @@ def next_pacific_midnight(moment=None):
     return reset_pacific.astimezone(moment.tzinfo)
 
 
+def allocate_youtube_publish_slots(rows, start, interval, now=None):
+    """Keep accepted/future slots; reassign missing or expired pending slots safely.
+
+    The allocator appends retries after the latest still-future planned destination,
+    enforces 100 publication slots per Pacific calendar day, and never rewrites
+    already accepted Scheduled/Published YouTube jobs.
+    """
+    if not 1 <= int(interval) <= 120:
+        raise ValueError("Interval must be between 1 and 120 minutes.")
+
+    now = now or local_now()
+    if start.tzinfo is None:
+        start = start.astimezone()
+    minimum_publish = now + timedelta(minutes=15)
+    pacific = ZoneInfo("America/Los_Angeles")
+    accepted = {"scheduled", "published"}
+    future_slots = []
+    daily_counts = {}
+    needs_slot = []
+
+    for row in rows:
+        status = str(row.get("yt_status") or "Pending").strip().lower()
+        raw_time = row.get("publish_at")
+        try:
+            publish_at = datetime.fromisoformat(raw_time).astimezone() if raw_time else None
+        except (TypeError, ValueError, OverflowError):
+            publish_at = None
+
+        if status in accepted:
+            # An accepted post is never re-uploaded or rescheduled by this helper.
+            if publish_at and publish_at > now:
+                future_slots.append(publish_at)
+                day = publish_at.astimezone(pacific).date()
+                daily_counts[day] = daily_counts.get(day, 0) + 1
+            continue
+
+        if publish_at and publish_at >= minimum_publish:
+            future_slots.append(publish_at)
+            day = publish_at.astimezone(pacific).date()
+            daily_counts[day] = daily_counts.get(day, 0) + 1
+        else:
+            needs_slot.append(row)
+
+    if not needs_slot:
+        return {}
+
+    base = max(
+        [start, minimum_publish] +
+        [slot.astimezone(start.tzinfo) + timedelta(minutes=int(interval)) for slot in future_slots]
+    )
+    cursor = base.astimezone(pacific)
+    assignments = {}
+
+    for row in needs_slot:
+        while daily_counts.get(cursor.date(), 0) >= 100:
+            next_day = cursor.date() + timedelta(days=1)
+            cursor = datetime.combine(
+                next_day, datetime.min.time().replace(hour=4), tzinfo=pacific
+            )
+
+        path = str(row["path"])
+        assignments[path] = cursor.astimezone(start.tzinfo).isoformat()
+        day = cursor.date()
+        daily_counts[day] = daily_counts.get(day, 0) + 1
+        cursor += timedelta(minutes=int(interval))
+
+    return assignments
+
+
 def suggested_start(count, youtube_enabled=True):
     now = local_now()
     # Large queues start after the next YouTube daily quota reset, with time to upload
@@ -1811,24 +1880,21 @@ class SchedulerApp:
             self.start_var.set(start.strftime("%Y-%m-%d %H:%M"))
             self.log("Start time was too close to now; moved it at least 15 minutes ahead.")
 
-        # Allocate YouTube publication slots in batches of 100 per Pacific quota day.
+        # Keep accepted/future YouTube slots, but reassign pending clips whose
+        # publishAt has expired or is missing (for example after an interrupted run).
         if yt_enabled:
             yt_unscheduled = [
-                r for r in rows
-                if r["yt_status"] not in {"Scheduled", "Published"} and not r["publish_at"]
+                row for row in rows
+                if row["yt_status"] not in {"Scheduled", "Published"}
             ]
-            yt_prior = sum(1 for r in rows if r["publish_at"])
-            if yt_prior + len(yt_unscheduled) > 100 and start < suggested_start(yt_prior + len(yt_unscheduled), True):
-                start = suggested_start(yt_prior + len(yt_unscheduled), True)
+            if len(rows) > 100 and start < suggested_start(len(rows), True):
+                start = suggested_start(len(rows), True)
                 self.start_var.set(start.strftime("%Y-%m-%d %H:%M"))
-            pacific = ZoneInfo("America/Los_Angeles")
-            base_pacific = start.astimezone(pacific)
-            for offset, row in enumerate(yt_unscheduled):
-                sequence = yt_prior + offset
-                slot = base_pacific + timedelta(days=sequence // 100, minutes=(sequence % 100) * interval)
+            youtube_slots = allocate_youtube_publish_slots(rows, start, interval)
+            for path, slot in youtube_slots.items():
                 self.db_execute(
                     "UPDATE clips SET publish_at=? WHERE path=?",
-                    (slot.astimezone().isoformat(), row["path"])
+                    (slot, path)
                 )
 
         # Meta's Reels publishing guide describes a limit of 30 API-published
