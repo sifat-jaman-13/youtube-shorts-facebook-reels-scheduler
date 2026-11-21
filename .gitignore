@@ -1,0 +1,49 @@
+# Python / virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local backups and editor files
+app.py.backup-*
+*.bak
+*.swp
+.vscode/
+.idea/
+
+# Local app state / credentials / logs
+README.txt
+*.log
+*.db
+*.sqlite
+*.sqlite3
+settings.json
+credentials.json
+youtube_token.json
+token.json
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Generated video and export files
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.wav
+*.ass
+*.srt
+*.vtt
+uploaded/
+schedule/
+You can delete these clips now/
+
+# Build output
+build/
+dist/
