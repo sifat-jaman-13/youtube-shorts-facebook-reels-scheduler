@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "1.1.8"
+APP_VERSION = "1.1.9"
 GRAPH_VERSION = "v27.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 DEFAULT_FOLDER = str(Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "StreamSnip AI" / "source" / "out")
@@ -1883,10 +1883,6 @@ class SchedulerApp:
         # Keep accepted/future YouTube slots, but reassign pending clips whose
         # publishAt has expired or is missing (for example after an interrupted run).
         if yt_enabled:
-            yt_unscheduled = [
-                row for row in rows
-                if row["yt_status"] not in {"Scheduled", "Published"}
-            ]
             if len(rows) > 100 and start < suggested_start(len(rows), True):
                 start = suggested_start(len(rows), True)
                 self.start_var.set(start.strftime("%Y-%m-%d %H:%M"))
