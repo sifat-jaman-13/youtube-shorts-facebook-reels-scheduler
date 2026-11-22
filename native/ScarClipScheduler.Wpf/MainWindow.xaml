@@ -345,29 +345,43 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="145"/>
-                                <ColumnDefinition Width="76"/>
+                                <ColumnDefinition Width="62"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="22"/>
+                                <ColumnDefinition Width="48"/>
+                                <ColumnDefinition Width="72"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="58"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="58"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="First post" VerticalAlignment="Center" Margin="0,0,9,0"/>
                             <DatePicker x:Name="StartDate" Grid.Row="0" Grid.Column="1" Margin="0,0,8,0"
-                                        ToolTip="Calendar date for the first post"/>
-                            <TextBox x:Name="StartTime" Grid.Row="0" Grid.Column="2" Width="68" Text="05:00"
-                                     Margin="0,0,8,0" ToolTip="Local 24-hour time, HH:mm"/>
-                            <Button Grid.Row="0" Grid.Column="3" Content="Next 5:00 AM" Click="NextFiveAm_Click"/>
-                            <TextBlock Grid.Row="0" Grid.Column="5" Text="Interval" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox x:Name="IntervalHours" Grid.Row="0" Grid.Column="6" Text="0"
+                                        ToolTip="Choose today or a future calendar date"/>
+                            <ComboBox x:Name="StartHour" Grid.Row="0" Grid.Column="2" Width="54" SelectedIndex="0"
+                                      Margin="0,0,4,0" ToolTip="Hour">
+                                <ComboBoxItem Content="1"/><ComboBoxItem Content="2"/>
+                                <ComboBoxItem Content="3"/><ComboBoxItem Content="4"/>
+                                <ComboBoxItem Content="5"/><ComboBoxItem Content="6"/>
+                                <ComboBoxItem Content="7"/><ComboBoxItem Content="8"/>
+                                <ComboBoxItem Content="9"/><ComboBoxItem Content="10"/>
+                                <ComboBoxItem Content="11"/><ComboBoxItem Content="12"/>
+                            </ComboBox>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text=":" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox x:Name="StartMinute" Grid.Row="0" Grid.Column="4" Width="42" Text="00"
+                                     MaxLength="2" PreviewTextInput="StartMinute_PreviewTextInput" HorizontalContentAlignment="Center" Margin="0,0,6,0"
+                                     ToolTip="Enter minutes from 00 to 59"/>
+                            <ComboBox x:Name="StartAmPm" Grid.Row="0" Grid.Column="5" Width="62" SelectedIndex="0"
+                                      Margin="0,0,10,0" ToolTip="AM or PM">
+                                <ComboBoxItem Content="AM"/><ComboBoxItem Content="PM"/>
+                            </ComboBox>
+                            <TextBlock Grid.Row="0" Grid.Column="6" Text="Interval" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="IntervalHours" Grid.Row="0" Grid.Column="7" Text="0"
                                      HorizontalContentAlignment="Center" ToolTip="Hours" Margin="0,0,4,0"/>
-                            <TextBlock Grid.Row="0" Grid.Column="7" Text="h" VerticalAlignment="Center" Foreground="#9AA8C4" Margin="3,0,8,0"/>
-                            <TextBox x:Name="IntervalMinutes" Grid.Row="0" Grid.Column="8" Text="5"
+                            <TextBlock Grid.Row="0" Grid.Column="8" Text="h" VerticalAlignment="Center" Foreground="#9AA8C4" Margin="3,0,8,0"/>
+                            <TextBox x:Name="IntervalMinutes" Grid.Row="0" Grid.Column="9" Text="5"
                                      HorizontalContentAlignment="Center" ToolTip="Additional minutes" Margin="0,0,4,0"/>
-                            <TextBlock Grid.Row="0" Grid.Column="9" Text="min" VerticalAlignment="Center" Foreground="#9AA8C4" Margin="3,0,0,0"/>
+                            <TextBlock Grid.Row="0" Grid.Column="10" Text="min" VerticalAlignment="Center" Foreground="#9AA8C4" Margin="3,0,0,0"/>
                             <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="11" Orientation="Horizontal" Margin="0,9,0,0">
                                 <CheckBox x:Name="YoutubeCheck" Content="YouTube Shorts"/>
                                 <CheckBox x:Name="FacebookCheck" Content="Facebook Page Reels"/>

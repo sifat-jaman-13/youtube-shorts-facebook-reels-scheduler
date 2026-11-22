@@ -49,6 +49,19 @@ class SchedulerRegressionTests(unittest.TestCase):
         csproj = (native / "ScarClipScheduler.Wpf.csproj").read_text(encoding="utf-8")
 
         self.assertIn("TargetFramework>net10.0-windows", csproj)
+        self.assertIn('x:Name="StartHour"', xaml)
+        self.assertIn('x:Name="StartMinute"', xaml)
+        self.assertIn('x:Name="StartAmPm"', xaml)
+        self.assertIn('PreviewTextInput="StartMinute_PreviewTextInput"', xaml)
+        self.assertIn("StartMinute_PreviewTextInput", code)
+        self.assertNotIn('x:Name="StartTime"', xaml)
+        self.assertNotIn("Next 5:00 AM", xaml)
+        self.assertNotIn("NextFiveAm_Click", code)
+        self.assertNotIn("Next 5:00 AM", (project / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("StartDate.DisplayDateStart = DateTime.Today", code)
+        self.assertIn("GetSelectedStartDateTime()", code)
+        self.assertIn("SetDefaultStartTime()", code)
+        self.assertIn("validate_future_start_at(data.get(\"start_at\"))", backend)
         self.assertIn("EnableRowVirtualization", xaml)
         self.assertIn("VirtualizingPanel.VirtualizationMode", xaml)
         self.assertIn("Clips.Insert", code)
@@ -836,6 +849,40 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn('x:Name="PART_Popup"', native_ui)
         self.assertIn('<Path Data="M 0,0 L 4,4 L 8,0 Z"', native_ui)
 
+
+
+
+
+class FutureScheduleValidationTests(unittest.TestCase):
+    def test_rejects_a_start_time_earlier_than_now(self):
+        now = datetime(2026, 11, 22, 16, 15, 0)
+        with self.assertRaisesRegex(ValueError, "later than the current local time"):
+            backend_service.validate_future_start_at("2026-11-22 16:14", now=now)
+
+    def test_rejects_a_start_time_equal_to_now(self):
+        now = datetime(2026, 11, 22, 16, 15, 0)
+        with self.assertRaisesRegex(ValueError, "later than the current local time"):
+            backend_service.validate_future_start_at("2026-11-22 16:15", now=now)
+
+    def test_accepts_a_future_start_time(self):
+        now = datetime(2026, 11, 22, 16, 15, 0)
+        result = backend_service.validate_future_start_at("2026-11-22 16:16", now=now)
+        self.assertEqual(result, datetime(2026, 11, 22, 16, 16))
+
+    def test_rejects_an_invalid_start_time(self):
+        with self.assertRaisesRegex(ValueError, "Choose a valid first post date"):
+            backend_service.validate_future_start_at("not-a-date", now=datetime(2026, 11, 22, 16, 15))
+
+    def test_queue_start_rejects_a_past_date_before_touching_settings(self):
+        fake_backend = SimpleNamespace(youtube_auth_worker=None, facebook_auth_worker=None)
+        with self.assertRaisesRegex(ValueError, "later than the current local time"):
+            backend_service.NativeBackend.start_queue(
+                fake_backend,
+                {
+                    "confirmed": True,
+                    "start_at": "2026-11-22 16:14",
+                },
+            )
 
 
 class SchedulingConfirmationApiTests(unittest.TestCase):

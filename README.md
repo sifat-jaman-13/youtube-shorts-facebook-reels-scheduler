@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.11 — Native Windows WPF desktop scheduler**
+**Version 2.0.13 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -52,7 +52,7 @@ ScarClipScheduler manages a queue of MP4 clips and matching TXT metadata, then s
 - **Reconnect and disconnect:** connected accounts show their state and can be reconnected or disconnected from the Connections page.
 - **Selective scheduling:** choose one clip, a group of clips, or the full queue.
 - **Metadata editing:** review and edit the title and description for each selected video.
-- **Schedule controls:** choose the first post date/time, use the Next 5:00 AM preset, and set an interval in hours and minutes.
+- **Schedule controls:** choose the first post date, select the hour and AM/PM, type minutes in the minute box, and set an interval in hours and minutes. Dates before today and first-post times that have already passed are rejected.
 - **Accepted-post filter:** hide accepted/scheduled items from the list without deleting their records.
 - **Safe queue removal:** remove local queue entries without deleting the source MP4/TXT files or cancelling posts already accepted by a platform.
 - **Publication verification:** check platform status after the scheduled time.
@@ -74,7 +74,7 @@ Use **Quit** inside the app to close ScarClipScheduler. If a scan, upload or ver
 4. Edit the selected clip's title and description if needed, then save the metadata.
 5. Open **Connections** and connect YouTube and/or Facebook.
 6. Select the Facebook Pages that should receive Reels.
-7. Set the first post date and local time. **Next 5:00 AM** selects the next upcoming 5 AM.
+7. Set the first post date, choose an hour from the dropdown, enter minutes from 00 to 59, and choose AM or PM. The calendar does not allow dates before today, and the app rejects any first-post time that is not in the future.
 8. Set the posting interval using hours and minutes. The accepted range is 1 minute through 24 hours.
 9. Choose YouTube Shorts, Facebook Page Reels, or both. Confirm that you have the rights to publish the videos, then choose **Schedule queue**.
 

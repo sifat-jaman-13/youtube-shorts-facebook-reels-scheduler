@@ -73,6 +73,19 @@ class DialogBridge:
         return bool(self.confirm)
 
 
+def validate_future_start_at(value, now=None):
+    """Require a schedule's first local post time to be strictly in the future."""
+    try:
+        start = datetime.strptime(str(value or "").strip(), "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Choose a valid first post date and time (YYYY-MM-DD HH:mm).") from exc
+
+    current = now if now is not None else datetime.now()
+    if start <= current:
+        raise ValueError("The first post date and time must be later than the current local time.")
+    return start
+
+
 class NativeBackend(core.SchedulerApp):
     def __init__(self):
         self.root = RootBridge(self)
@@ -358,6 +371,7 @@ class NativeBackend(core.SchedulerApp):
     def start_queue(self, data):
         if data.get("confirmed") is not True:
             raise RuntimeError("Scheduling was not sent with an explicit desktop user confirmation.")
+        validate_future_start_at(data.get("start_at"))
         if any(worker and worker.is_alive() for worker in (self.youtube_auth_worker, self.facebook_auth_worker)):
             raise RuntimeError("Wait for account authorization to finish before scheduling.")
         self.dialogs.confirm = True

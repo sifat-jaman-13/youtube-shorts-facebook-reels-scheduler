@@ -38,11 +38,12 @@ public partial class MainWindow : Window
         var appIcon = Path.Combine(AppContext.BaseDirectory, "backend", "assets", "scarclipscheduler.ico");
         if (File.Exists(appIcon))
             Icon = BitmapFrame.Create(new Uri(appIcon, UriKind.Absolute));
-        Title = "ScarClipScheduler 2.0.11";
+        Title = "ScarClipScheduler 2.0.13";
         DataContext = this;
         ClipGrid.ItemsSource = Clips;
+        StartDate.DisplayDateStart = DateTime.Today;
         StartDate.SelectedDate = DateTime.Today;
-        NextFiveAm_Click(this, new RoutedEventArgs());
+        SetDefaultStartTime();
 
         _eventTimer = new DispatcherTimer
         {
@@ -209,14 +210,15 @@ public partial class MainWindow : Window
 
     private void ApplyScheduleInputs(NativeState state)
     {
-        if (DateTime.TryParse(state.StartAt, out var start))
+        StartDate.DisplayDateStart = DateTime.Today;
+        if (DateTime.TryParse(state.StartAt, out var start) &&
+            start.Date >= DateTime.Today && start > DateTime.Now)
         {
-            StartDate.SelectedDate = start.Date;
-            StartTime.Text = start.ToString("HH:mm");
+            SetStartDateTime(start);
         }
         else
         {
-            SetNextFiveAm();
+            SetDefaultStartTime();
         }
 
         var interval = Math.Clamp(state.IntervalMinutes, 1, 1440);
@@ -410,16 +412,51 @@ public partial class MainWindow : Window
         }
     }
 
-    private void NextFiveAm_Click(object sender, RoutedEventArgs e) => SetNextFiveAm();
-
-    private void SetNextFiveAm()
+    private void SetStartDateTime(DateTime value)
     {
-        var now = DateTime.Now;
-        var next = now.Date.AddHours(5);
-        if (next <= now)
-            next = next.AddDays(1);
-        StartDate.SelectedDate = next.Date;
-        StartTime.Text = "05:00";
+        StartDate.SelectedDate = value.Date;
+        var hour12 = value.Hour % 12;
+        StartHour.SelectedIndex = hour12 == 0 ? 11 : hour12 - 1;
+        StartMinute.Text = value.Minute.ToString("D2");
+        StartAmPm.SelectedIndex = value.Hour >= 12 ? 1 : 0;
+    }
+
+    private void SetDefaultStartTime()
+    {
+        // Match the scheduler's 15-minute minimum lead time, rounded up to
+        // the next quarter-hour so the default can never already be past.
+        var target = DateTime.Now.AddMinutes(15);
+        var remainder = target.Minute % 15;
+        if (remainder != 0 || target.Second != 0 || target.Millisecond != 0)
+            target = target.AddMinutes(15 - remainder);
+        target = new DateTime(target.Year, target.Month, target.Day, target.Hour, target.Minute, 0);
+        SetStartDateTime(target);
+    }
+
+    private void StartMinute_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+    {
+        e.Handled = !e.Text.All(char.IsDigit);
+    }
+
+    private DateTime GetSelectedStartDateTime()
+    {
+        if (StartDate.SelectedDate is not DateTime selectedDate)
+            throw new InvalidOperationException("Choose the first post date.");
+
+        if (StartHour.SelectedItem is not ComboBoxItem hourItem ||
+            !int.TryParse(hourItem.Content?.ToString(), out var hour12) ||
+            hour12 < 1 || hour12 > 12)
+            throw new InvalidOperationException("Choose an hour between 1 and 12.");
+
+        if (!int.TryParse(StartMinute.Text.Trim(), out var minute) || minute < 0 || minute > 59)
+            throw new InvalidOperationException("Enter minutes as a number from 00 to 59.");
+
+        var period = (StartAmPm.SelectedItem as ComboBoxItem)?.Content?.ToString();
+        if (period is not ("AM" or "PM"))
+            throw new InvalidOperationException("Choose AM or PM.");
+
+        var hour24 = (hour12 % 12) + (period == "PM" ? 12 : 0);
+        return new DateTime(selectedDate.Year, selectedDate.Month, selectedDate.Day, hour24, minute, 0);
     }
 
     private void NavQueue_Click(object sender, RoutedEventArgs e) => ShowPage("queue");
@@ -470,7 +507,17 @@ public partial class MainWindow : Window
                 return;
             }
 
+            StartDate.DisplayDateStart = DateTime.Today;
             var settings = BuildSettingsPayload();
+            var requestedStart = DateTime.Parse((string)settings["start_at"]!);
+            if (requestedStart <= DateTime.Now)
+            {
+                ShowWarning(
+                    "Choose a future time",
+                    "The first post date and time must be later than your current local time. Choose a later time or a future date.");
+                return;
+            }
+
             var selected = ClipGrid.SelectedItems.Cast<ClipRow>().Select(row => row.Path).ToList();
             settings["selected_paths"] = selected;
             settings["rights_confirmed"] = true;
@@ -686,10 +733,9 @@ public partial class MainWindow : Window
 
     private Dictionary<string, object?> BuildSettingsPayload()
     {
-        if (!DateTime.TryParse(StartTime.Text, out var parsedTime))
-            throw new InvalidOperationException("Enter the first post time as HH:mm.");
-        if (!DateTime.TryParse(StartDate.SelectedDate?.ToString("yyyy-MM-dd") + " " + parsedTime.ToString("HH:mm"), out var start))
-            throw new InvalidOperationException("Choose a valid first post date and time.");
+        var start = GetSelectedStartDateTime();
+        if (StartDate.SelectedDate!.Value.Date < DateTime.Today)
+            throw new InvalidOperationException("The first post date cannot be earlier than today.");
         if (!int.TryParse(IntervalHours.Text, out var hours) || hours < 0 || hours > 24)
             throw new InvalidOperationException("Hours must be between 0 and 24.");
         if (!int.TryParse(IntervalMinutes.Text, out var minutes) || minutes < 0 || minutes > 59)
@@ -780,7 +826,7 @@ public partial class MainWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.11  |  Native Windows application",
+            Text = "Version 2.0.13  |  Native Windows application",
             FontSize = 12,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(154, 168, 196)),
             Margin = new Thickness(0, 0, 0, 14)

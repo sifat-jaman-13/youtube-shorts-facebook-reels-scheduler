@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.13] - 2026-11-22
+
+### Fixed
+
+- Replaced the 24-hour time field with a 12-hour hour dropdown, a two-digit minute entry box, and an AM/PM dropdown.
+- Removed the "Next 5:00 AM" button and set a sensible future quarter-hour default automatically.
+- Prevent choosing a calendar date before today and reject a first-post time that is earlier than or equal to the current local time.
+- Enforce the future-time rule again in the publishing worker so stale UI values cannot start a past-dated schedule.
+- Added regression tests for past, current, future, and invalid start times and for the new time controls.
+
 ## [2.0.12] - 2026-11-22
 
 ### Fixed
