@@ -137,7 +137,7 @@ Run this only if you do not already have Python 3.11+ installed. It matches the 
 ```powershell
 winget --version
 winget install --id Python.Python.3.12 --exact --source winget --scope user --accept-package-agreements --accept-source-agreements
-py -3.12 --version
+py -3 --version
 ```
 
 If `winget` is not recognized, install or update **App Installer** using the Microsoft Store link above, reopen PowerShell, and retry. Alternatively, install 64-bit Python manually from python.org and reopen PowerShell.
