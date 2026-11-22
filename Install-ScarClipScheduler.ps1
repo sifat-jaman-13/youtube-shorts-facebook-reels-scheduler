@@ -1,5 +1,30 @@
 $ErrorActionPreference = 'Stop'
 
+# Persist setup diagnostics in the user's data folder, not beside the program.
+$dataDir = Join-Path $env:LOCALAPPDATA 'ScarClipScheduler'
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+$setupLog = Join-Path $dataDir 'installer-setup.log'
+$transcriptStarted = $false
+try {
+    Start-Transcript -Path $setupLog -Append -Force | Out-Null
+    $transcriptStarted = $true
+} catch {
+    Write-Host "Warning: could not start setup transcript: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
+trap {
+    $setupError = $_
+    Write-Host ''
+    Write-Host 'SCARCLIPSCHEDULER SETUP FAILED' -ForegroundColor Red
+    Write-Host $setupError.Exception.Message -ForegroundColor Red
+    Write-Host "Detailed setup log: $setupLog" -ForegroundColor Yellow
+    if ($transcriptStarted) {
+        try { Stop-Transcript | Out-Null } catch { }
+    }
+    Read-Host 'Press Enter to close this setup window'
+    exit 1
+}
+
 $source = Split-Path -Parent $MyInvocation.MyCommand.Path
 $install = Join-Path $env:LOCALAPPDATA 'Programs\ScarClipScheduler'
 $dataDir = Join-Path $env:LOCALAPPDATA 'ScarClipScheduler'
@@ -58,7 +83,7 @@ function Refresh-ProcessPath {
 }
 
 Write-Host ''
-Write-Host 'ScarClipScheduler 2.0.3 — installation checks' -ForegroundColor Cyan
+Write-Host 'ScarClipScheduler 2.0.5 — installation checks' -ForegroundColor Cyan
 Write-Host 'This setup check runs during installation, not when you launch the app.' -ForegroundColor Gray
 Write-Host ''
 
@@ -194,7 +219,9 @@ Write-Host 'ScarClipScheduler setup completed successfully.' -ForegroundColor Gr
 Write-Host "Application: $exe"
 Write-Host "User data:   $dataDir"
 Write-Host 'Your queue database, scheduled-post records, settings, and platform credentials were not removed.' -ForegroundColor Gray
+Write-Host "Setup log:   $setupLog" -ForegroundColor Gray
 Write-Host ''
+if ($transcriptStarted) { Stop-Transcript | Out-Null }
 $startNow = Read-Host 'Start ScarClipScheduler now? (Y/N)'
 if ($startNow -match '^(y|yes)$') {
     Start-Process -FilePath $exe -WorkingDirectory $install
