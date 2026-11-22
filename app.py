@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "2.0.5"
+APP_VERSION = "2.0.6"
 MAX_INTERVAL_MINUTES = 24 * 60
 APP_DIR = Path(__file__).resolve().parent
 ASSET_DIR = APP_DIR / "assets"
