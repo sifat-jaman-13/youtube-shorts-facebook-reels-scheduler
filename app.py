@@ -21,7 +21,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "1.4.0"
+APP_VERSION = "2.0.2"
+MAX_INTERVAL_MINUTES = 24 * 60
 APP_DIR = Path(__file__).resolve().parent
 ASSET_DIR = APP_DIR / "assets"
 APP_LOGO_PATH = ASSET_DIR / "scarclipscheduler-logo.png"
@@ -34,7 +35,7 @@ YT_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
 ]
-LOCAL_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / APP_NAME
+LOCAL_DIR = Path(os.environ.get("SCARCLIPSCHEDULER_DATA_DIR") or (Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / APP_NAME))
 LOCAL_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = LOCAL_DIR / "queue.db"
 SETTINGS_PATH = LOCAL_DIR / "settings.json"
@@ -143,8 +144,8 @@ def allocate_youtube_publish_slots(rows, start, interval, now=None):
     enforces 100 publication slots per Pacific calendar day, and never rewrites
     already accepted Scheduled/Published YouTube jobs.
     """
-    if not 1 <= int(interval) <= 120:
-        raise ValueError("Interval must be between 1 and 120 minutes.")
+    if not 1 <= int(interval) <= MAX_INTERVAL_MINUTES:
+        raise ValueError(f"Interval must be between 1 and {MAX_INTERVAL_MINUTES} minutes (24 hours).")
 
     now = now or local_now()
     if start.tzinfo is None:
@@ -2207,8 +2208,8 @@ class SchedulerApp:
         try:
             start = datetime.strptime(self.start_var.get().strip(), "%Y-%m-%d %H:%M").astimezone()
             interval = int(self.interval_var.get())
-            if interval < 1 or interval > 120:
-                raise ValueError("Interval must be between 1 and 120 minutes.")
+            if interval < 1 or interval > MAX_INTERVAL_MINUTES:
+                raise ValueError(f"Interval must be between 1 and {MAX_INTERVAL_MINUTES} minutes (24 hours).")
         except Exception as exc:
             messagebox.showerror("Invalid schedule", str(exc))
             return

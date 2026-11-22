@@ -1,5 +1,57 @@
 # Changelog
 
+## [2.0.2] - 2026-11-22
+
+### Changed
+
+- Removed the Support Terminal button, automatic terminal launch, and terminal script. Normal operation is fully contained in the native WPF app; status and publishing events remain available in the Activity log.
+- Simplified the About window: removed the connected Facebook Page list and the credential disclaimer. Creator credits, GitHub repositories, YouTube channels, and other public profile links remain.
+- Updated the About and window version to 2.0.2.
+
+## [2.0.1] - 2026-11-22
+
+### Added
+
+- Added an About window crediting Sifat Jaman / ScarZero and ChatGPT by OpenAI, linking the creator's GitHub projects, the connected YouTube channel and connected Facebook Pages.
+- Added an automatically opened Support terminal that tails app and worker logs; the header button can reopen it, and closing it does not stop the app.
+- Redacts common API keys, OAuth tokens and bearer credentials in the terminal display.
+
+### Changed
+
+- YouTube Reconnect now forces a fresh Google OAuth authorization and restores the previous valid token if the new authorization fails.
+- Added clear Connecting/Reconnecting status text while platform authorization is in progress.
+- Clarified that the Python publishing worker is hidden during normal operation; the WPF app and Activity log remain the primary interface.
+
+### Preserved
+
+- Closing the optional Support terminal does not stop the app.
+- Disconnect removes local credentials only; already accepted platform-side schedules and queue history are preserved.
+
+## [2.0.0] - 2026-11-22
+
+### Changed
+
+- Replaced the Python/Tkinter and Qt desktop windows with a native .NET 10 WPF Windows application.
+- Separated the responsive WPF interface from the existing Python publishing service; YouTube and Meta API logic, OAuth tokens, queue database and file layout are retained.
+- Added virtualized, incrementally updated clip-grid rows, separate action/status areas, readable schedule controls and ellipsized metadata cells with full-text tooltips.
+- Added explicit YouTube and Facebook connection states with Reconnect and Disconnect actions.
+- Disconnect removes the locally stored OAuth/Page tokens only. It does not cancel posts already accepted by YouTube or Facebook or delete queue history.
+
+## [1.5.0] - 2026-11-22
+
+### Changed
+
+- Replaced the Tkinter desktop interface with a native Qt Widgets interface built with PySide6 Essentials.
+- Kept the existing YouTube/Meta publishing engine, SQLite schema, local settings, OAuth tokens, and queue records in place.
+- Routed worker-thread UI updates through Qt's queued signal mechanism; scanning, uploads, OAuth, and publication verification continue outside the UI thread.
+- Added separate hour and minute interval controls (1 minute through 24 hours), plus a next-5:00-AM start preset. A blank first-run schedule defaults to the next 5:00 AM in Windows local time.
+- Changed the Windows bootstrapper to install the Qt front end and launch qt_app.py.
+
+### Preserved
+
+- Existing accepted YouTube and Facebook schedules are not resubmitted by the UI migration.
+- Existing queue database, Page tokens, Google OAuth token, settings, and clip files remain in the same local data folder.
+
 ## [1.4.0] - 2026-11-22
 
 ### Added

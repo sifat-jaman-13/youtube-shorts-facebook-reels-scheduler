@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0B1020">
-<meta name="description" content="ScarClipScheduler is a Windows desktop app for organizing, editing and scheduling YouTube Shorts and Facebook Page Reels.">
+<meta name="description" content="ScarClipScheduler 2.0.2 is a native Windows scheduler with a responsive clip queue, per-video metadata editing, and hour-and-minute scheduling for YouTube Shorts and Facebook Page Reels.">
 <meta property="og:title" content="ScarClipScheduler — Publish your clips with a plan">
 <meta property="og:description" content="Review clips, edit post copy and schedule from one Windows desktop queue.">
 <meta property="og:image" content="https://raw.githubusercontent.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/main/assets/scarclipscheduler-banner.svg">
@@ -39,51 +39,57 @@ footer{padding:28px 0 40px;border-top:1px solid var(--line);color:#8498ae;font-s
 <body>
 <header><div class="wrap"><nav>
 <a class="brand" href="#"><img class="brand-icon" src="scarclipscheduler-logo.png" alt=""><span>ScarClipScheduler</span></a>
-<div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#setup">Setup</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">GitHub</a><a class="navcta" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler.exe">Download v1.4.0 ↗</a></div>
+<div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#setup">Setup</a><a href="#about">About</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">GitHub</a><a class="navcta" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip">Download v2.0.2</a></div>
 </nav></div></header>
 <main>
 <div class="wrap hero"><div class="hero-grid">
 <div>
-<div class="pill"><span class="dot"></span> Windows desktop app · v1.4.0</div>
+<div class="pill"><span class="dot"></span> Windows desktop app - v2.0.2</div>
 <h1>Publish your clips <span class="gradient">with a plan.</span></h1>
-<p class="lead">Bring your short-form video queue into one place. Review each clip, edit its post copy, choose what to publish, and schedule to YouTube Shorts and Facebook Pages.</p>
-<div class="actions"><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler.exe">↓ Download for Windows</a><a class="btn secondary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Explore the project ↗</a></div>
-<p class="fine">Free and open source · Windows EXE bootstrapper · Platform credentials required</p>
-<div class="trust"><span>✓ <b>Selective scheduling</b></span><span>✓ <b>Per-clip copy editing</b></span><span>✓ <b>Queue tracking</b></span></div>
+<p class="lead">Review your MP4 queue, edit each video's title and description, choose the publishing destinations, and schedule YouTube Shorts and Facebook Page Reels from one native Windows app.</p>
+<div class="actions"><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip">Download for Windows</a><a class="btn secondary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Explore the project</a></div>
+<p class="fine">Windows 10/11 x64 - Native .NET 10 WPF - Python publishing worker</p>
+<div class="trust"><span><b>Selective scheduling</b></span><span><b>Per-clip metadata</b></span><span><b>Live queue tracking</b></span></div>
 </div>
-<div class="preview" aria-label="Illustrative video queue preview"><div class="window"><div class="wbar"><i></i><i></i><i></i><span>SCARCLIPSCHEDULER · QUEUE</span></div>
-<div class="mock"><div class="mockhead"><span>Detected clips</span><span class="tag">＋ Add videos</span></div>
-<div class="clip sel"><span class="check">✓</span><span><span class="fname">clip_01_hotwire.mp4</span><br><span class="sub">Title and description ready to edit</span></span><span class="state">Selected</span></div>
-<div class="clip"><span class="check"></span><span><span class="fname">clip_02_race.mp4</span><br><span class="sub">Review post copy before scheduling</span></span><span class="sub">Queued</span></div>
-<div class="clip sel"><span class="check">✓</span><span><span class="fname">clip_03_reaction.mp4</span><br><span class="sub">Ready for selected-clip scheduling</span></span><span class="state">Selected</span></div>
+<div class="preview" aria-label="Illustrative video queue preview"><div class="window"><div class="wbar"><i></i><i></i><i></i><span>SCARCLIPSCHEDULER - QUEUE</span></div>
+<div class="mock"><div class="mockhead"><span>Detected clips</span><span class="tag">MP4 + TXT</span></div>
+<div class="clip sel"><span class="check">&#10003;</span><span><span class="fname">highlight_001.mp4</span><br><span class="sub">Title and description ready to edit</span></span><span class="state">Selected</span></div>
+<div class="clip"><span class="check"></span><span><span class="fname">highlight_002.mp4</span><br><span class="sub">Review post copy before scheduling</span></span><span class="sub">Pending</span></div>
+<div class="clip sel"><span class="check">&#10003;</span><span><span class="fname">highlight_003.mp4</span><br><span class="sub">Choose platforms and publish time</span></span><span class="state">Selected</span></div>
 <div class="mockfoot"><span>2 clips selected</span><span class="bar"><b></b></span><span>2 / 3</span></div></div></div><div class="float">One queue. Your publishing plan.</div></div>
 </div></div>
-<section id="features"><div class="wrap"><div class="head"><div class="kicker">Made for creator workflows</div><h2>Your clips. Your copy. Your schedule.</h2><p>Keep the final review and scheduling steps organized without losing track of which videos are ready to publish.</p></div>
+
+<section id="features"><div class="wrap"><div class="head"><div class="kicker">Made for creator workflows</div><h2>Your clips. Your copy. Your schedule.</h2><p>Keep publishing decisions in one place without losing track of accepted posts or the original video files.</p></div>
 <div class="cards">
-<article class="card"><div class="ico">▤</div><h3>One clear video queue</h3><p>Review detected videos and their publishing status in a single desktop interface.</p></article>
-<article class="card"><div class="ico">☑</div><h3>Schedule what you select</h3><p>Choose one clip or use Ctrl/Shift selection for multiple clips. With no selection, the app uses the full queue.</p></article>
-<article class="card"><div class="ico">✎</div><h3>Edit every clip's copy</h3><p>Open a video to edit its title and description before scheduling.</p></article>
-<article class="card"><div class="ico">↗</div><h3>YouTube + Facebook Pages</h3><p>Connect platform credentials and manage supported publishing destinations from the app.</p></article>
-<article class="card"><div class="ico">◷</div><h3>Scheduling visibility</h3><p>See queue status and keep track of scheduled jobs and publication verification.</p></article>
-<article class="card"><div class="ico">⌫</div><h3>Remove without deleting media</h3><p>Remove selected entries from the app's queue. This does not erase original MP4 or TXT files.</p></article>
+<article class="card"><div class="ico">W</div><h3>Native Windows interface</h3><p>A .NET 10 WPF desktop app with dedicated navigation, status areas, and an in-app Activity log. The Python publishing worker runs separately in the background.</p></article>
+<article class="card"><div class="ico">Q</div><h3>Responsive large queue</h3><p>A virtualized clip table updates changed rows instead of clearing and rebuilding the whole list during refreshes.</p></article>
+<article class="card"><div class="ico">S</div><h3>Flexible schedule controls</h3><p>Choose the first post date and time, jump to the next 5:00 AM, and set an interval in hours and minutes from 1 minute to 24 hours.</p></article>
+<article class="card"><div class="ico">Y</div><h3>YouTube Shorts + Facebook Reels</h3><p>Choose YouTube, selected Facebook Pages, or both. Each destination's upload and scheduled status is tracked in the queue.</p></article>
+<article class="card"><div class="ico">A</div><h3>Account controls</h3><p>See whether each platform is connected. Reconnect starts authorization again; Disconnect removes local tokens without cancelling accepted platform schedules.</p></article>
+<article class="card"><div class="ico">M</div><h3>Per-video metadata</h3><p>Match MP4 clips with same-basename TXT files, preview titles and descriptions, edit metadata, and save changes for each clip.</p></article>
+<article class="card"><div class="ico">H</div><h3>Safe queue management</h3><p>Hide fully accepted posts without deleting their records. Remove queue entries without deleting MP4/TXT files or cancelling posts already accepted by a platform.</p></article>
+<article class="card"><div class="ico">V</div><h3>Publication verification</h3><p>Check whether scheduled uploads have become public and review failed or partial destinations from the Activity log.</p></article>
 </div></div></section>
-<section id="workflow"><div class="wrap"><div class="head"><div class="kicker">Simple workflow</div><h2>From detected clip to scheduled post.</h2><p>Keep control of the last mile before your content goes live.</p></div>
-<div class="steps"><article class="step"><h3>Load and review</h3><p>Bring video clips into the queue and check each detected item.</p></article><article class="step"><h3>Choose and personalize</h3><p>Select one or more clips, then edit titles and descriptions for those videos.</p></article><article class="step"><h3>Connect and schedule</h3><p>Set up YouTube and Meta credentials, choose publishing destinations, and schedule your selection.</p></article></div></div></section>
-<section id="setup"><div class="wrap"><div class="head"><div class="kicker">Getting started</div><h2>Set up once. Then manage your queue.</h2><p>The app uses official platform authentication flows. You need your own developer credentials before publishing.</p></div>
+
+<section id="workflow"><div class="wrap"><div class="head"><div class="kicker">Simple workflow</div><h2>From detected clip to scheduled post.</h2><p>Upload now, then let the platforms publish at the times you choose.</p></div>
+<div class="steps"><article class="step"><h3>Load and review</h3><p>Choose the clip folder, scan MP4 files, and verify matching TXT metadata.</p></article><article class="step"><h3>Choose and personalize</h3><p>Select one or more clips, then edit and save each video's title and description.</p></article><article class="step"><h3>Connect and schedule</h3><p>Connect YouTube and Meta, select destinations, choose the first time and interval, and schedule the queue.</p></article></div></div></section>
+
+<section id="setup"><div class="wrap"><div class="head"><div class="kicker">Getting started</div><h2>Set up once. Then manage your queue.</h2><p>The application uses your own Google and Meta authorization, stored locally in your Windows user profile.</p></div>
 <div class="setup">
-<article><h3>1. Install on Windows</h3><p>Download the EXE from Releases and open it. On first launch, the bootstrapper checks for Python 3.11+, attempts a per-user Python 3.12 install through Windows Package Manager if needed, creates an app virtual environment, and installs required packages from the internet.</p><ul><li>Internet access is required for initial setup.</li><li>Python may need to be installed manually if winget is unavailable.</li><li>The EXE is unsigned, so SmartScreen may display a warning.</li></ul></article>
-<article><h3>2. Connect YouTube</h3><p>Create a Google Cloud project, enable YouTube Data API v3, configure OAuth consent, and create an OAuth Client ID for a Desktop app. Add the downloaded client JSON in the scheduler.</p><ul><li>An API key alone is not enough for uploads.</li><li>Use OAuth 2.0 Desktop App credentials.</li><li>See the README for the detailed setup walkthrough.</li></ul></article>
-<article><h3>3. Connect Facebook</h3><p>Create a Meta developer app and configure the required Page publishing permissions. Enter your own App ID and App Secret in the scheduler.</p><ul><li>Access to a Facebook Page with the required role is needed.</li><li>Meta review or business verification may apply to some permissions.</li><li>See the README for permission and redirect details.</li></ul></article>
-<article><h3>4. Keep credentials private</h3><p>Use your own platform accounts and developer credentials. Do not upload OAuth files, tokens, app secrets, or local database files to GitHub or share them publicly.</p><ul><li>Review privacy and security guidance in the README.</li><li>Keep a backup of local queue data.</li><li>Removing a queue entry does not cancel an already-accepted platform schedule.</li></ul></article>
-</div><div class="note">The release EXE is a small Windows bootstrapper, not a self-contained Python runtime. It locates or installs Python and downloads app dependencies during first-time setup.</div>
-</div></section>
-<section><div class="wrap"><div class="download"><div><div class="kicker">Latest stable release</div><h2 style="margin-bottom:0">ScarClipScheduler v1.4.0</h2><p>Selective clip scheduling, editable per-video metadata, queue removal, and a Windows setup bootstrapper.</p></div><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler.exe">Download EXE ↗</a></div></div></section>
+<article><h3>1. Install on Windows</h3><p>Download the Windows x64 ZIP, extract it, and run Install-ScarClipScheduler.ps1. Setup installs the native app, prepares the isolated Python worker environment, and creates a Start Menu shortcut.</p><ul><li>The WPF executable is self-contained for .NET 10.</li><li>Python 3.11 or newer is used by the publishing worker.</li><li>Internet is needed for first-time dependencies and platform API access.</li></ul></article>
+<article><h3>2. Connect YouTube</h3><p>Enable YouTube Data API v3 in Google Cloud, create an OAuth 2.0 Desktop application client, and choose the downloaded JSON file in Connections.</p><ul><li>An API key alone is not enough for uploads.</li><li>Sign in to the Google account that owns the channel.</li><li>Reconnect starts a fresh Google authorization.</li></ul></article>
+<article><h3>3. Connect Facebook</h3><p>Create a Meta developer app, configure the required Page permissions and localhost redirect URI, then enter the Meta App ID, App Secret and Business Portfolio ID.</p><ul><li>The connecting account needs access to the Pages.</li><li>Choose which connected Pages should receive Reels.</li><li>Reconnect starts the authorization flow again.</li></ul></article>
+<article><h3>4. Review the schedule</h3><p>Choose the local first-post time and posting interval. Scheduling submits videos now and records the time accepted by each platform.</p><ul><li>A platform-accepted schedule is not yet a public post.</li><li>Use Check publication to verify later.</li><li>Removing a local row does not cancel platform-side posts.</li></ul></article>
+</div></div></section>
+
+<section><div class="wrap"><div class="download"><div><div class="kicker">Native Windows application</div><h2 style="margin-bottom:0">ScarClipScheduler v2.0.2</h2><p>Responsive WPF interface, virtualized clip queue, hour/minute scheduling, connection controls, and a separate local publishing worker. No support-terminal window is required.</p></div><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip">Download Windows ZIP</a></div></div></section>
+
 <section id="faq"><div class="wrap"><div class="head"><div class="kicker">Good to know</div><h2>Frequently asked questions.</h2></div><div class="faq">
-<details><summary>Is the EXE a fully portable app?</summary><p>No. It is a bootstrapper that locates or installs Python and installs app dependencies the first time it runs. Internet access is required during setup.</p></details>
-<details><summary>Does deleting a clip from the queue delete its MP4?</summary><p>No. Delete from list removes local queue records and related local job tracking. It does not delete source MP4/TXT files or cancel schedules already accepted by YouTube or Meta.</p></details>
-<details><summary>Can I schedule just one video?</summary><p>Yes. Select one video to schedule only that video, or use Ctrl/Shift to select multiple. With no selection, scheduling applies to the full queue.</p></details>
-<details><summary>Does the app provide API credentials?</summary><p>No. You must create and supply your own Google Cloud OAuth credentials and Meta developer app credentials. Detailed instructions are in the README.</p></details>
+<details><summary>Does the app need a support terminal?</summary><p>No. The WPF interface starts the local Python publishing worker in the background. Scan, upload, schedule, verification and error messages appear in the in-app Activity log.</p></details>
+<details><summary>Does deleting a clip from the queue delete its MP4?</summary><p>No. Delete from list removes local queue records and Page-job tracking. It does not delete source MP4/TXT files or cancel schedules already accepted by YouTube or Meta.</p></details>
+<details><summary>Can I schedule just one video?</summary><p>Yes. Select one row for one video, or use Ctrl/Shift to select multiple clips. With no rows selected, scheduling applies to the full queue.</p></details>
+<details><summary>Does the app provide Google or Meta credentials?</summary><p>No. You create and authorize your own developer credentials. The app stores its tokens locally and never packages them in the public release.</p></details>
 </div></div></section>
 </main>
-<footer><div class="wrap foot"><span>© 2026 ScarClipScheduler · Created by <a href="https://github.com/sifat-jaman-13"><b>Sifat Jaman</b></a> with assistance from ChatGPT.</span><div class="footlinks"><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Source code</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases">Releases</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/blob/main/README.md">Documentation</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/issues">Report an issue</a></div></div></footer>
+<footer id="about"><div class="wrap foot"><div><b>ScarClipScheduler</b><div>Created by <a href="https://github.com/sifat-jaman-13"><b>Sifat Jaman / ScarZero</b></a> with development assistance from ChatGPT by OpenAI.</div><div class="footlinks"><a href="https://youtube.com/@scarclipfarm">Scar Clip Farm</a><a href="https://www.youtube.com/@scarzeroyt">ScarZero YouTube</a><a href="https://www.instagram.com/scarzero13/">Instagram</a><a href="https://www.facebook.com/ScarZero13">Facebook</a><a href="https://www.twitch.tv/scarzero13">Twitch</a><a href="https://www.tiktok.com/@scarzero13/">TikTok</a></div></div><div class="footlinks"><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Source code</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases">Releases</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/blob/main/README.md">Documentation</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/issues">Report an issue</a></div></div></footer>
 </body></html>

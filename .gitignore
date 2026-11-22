@@ -44,6 +44,32 @@ uploaded/
 schedule/
 You can delete these clips now/
 
-# Build output (the release EXE is explicitly force-added to Git)
+# Build output (published separately through GitHub Releases)
 build/
 dist/
+
+# Never commit local API keys, OAuth clients/tokens, private keys or credentials
+.env
+.env.*
+!.env.example
+*.env
+*.secrets.json
+secrets/
+.secrets/
+credentials*.json
+client_secret*.json
+service-account*.json
+oauth*.json
+token*.json
+youtube_token.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# .NET / WPF build outputs
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo

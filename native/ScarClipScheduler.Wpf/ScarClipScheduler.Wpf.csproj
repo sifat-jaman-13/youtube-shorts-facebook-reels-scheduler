@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ScarClipScheduler</AssemblyName>
+    <RootNamespace>ScarClipScheduler.Wpf</RootNamespace>
+    <Version>2.0.2</Version>
+    <Product>ScarClipScheduler</Product>
+    <Company>ScarZero</Company>
+    <Description>Native Windows scheduler for YouTube Shorts and Facebook Page Reels.</Description>
+    <ApplicationIcon>..\..\assets\scarclipscheduler.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\app.py" Link="backend\app.py" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="..\..\backend_service.py" Link="backend\backend_service.py" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="..\..\requirements.txt" Link="backend\requirements.txt" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="..\..\assets\scarclipscheduler-logo.png" Link="backend\assets\scarclipscheduler-logo.png" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="..\..\assets\scarclipscheduler.ico" Link="backend\assets\scarclipscheduler.ico" CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+</Project>

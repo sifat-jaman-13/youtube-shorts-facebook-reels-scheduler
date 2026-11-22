@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
 import app
+import backend_service
 
 
 class SchedulerRegressionTests(unittest.TestCase):
@@ -34,14 +35,197 @@ class SchedulerRegressionTests(unittest.TestCase):
             "4 selected | batch scheduling"
         )
 
-    def test_support_terminal_warns_users_to_keep_it_open_and_quit_in_app(self):
+    def test_native_wpf_frontend_is_virtualized_and_has_connection_controls(self):
         project = Path(app.__file__).resolve().parent
-        source = (project / "bootstrapper" / "Program.cs").read_text(encoding="utf-8")
-        self.assertIn("ScarClipScheduler by ScarZero is now running.", source)
-        self.assertIn("KEEP THIS TERMINAL WINDOW OPEN", source)
-        self.assertIn("Closing this terminal may stop the application.", source)
-        self.assertIn("click the Quit button inside ScarClipScheduler", source)
-        self.assertIn("RunApplicationAndWait", source)
+        native = project / "native" / "ScarClipScheduler.Wpf"
+        xaml = (native / "MainWindow.xaml").read_text(encoding="utf-8")
+        code = (native / "MainWindow.xaml.cs").read_text(encoding="utf-8")
+        backend = (project / "backend_service.py").read_text(encoding="utf-8")
+        client = (native / "BackendClient.cs").read_text(encoding="utf-8")
+        csproj = (native / "ScarClipScheduler.Wpf.csproj").read_text(encoding="utf-8")
+
+        self.assertIn("TargetFramework>net10.0-windows", csproj)
+        self.assertIn("EnableRowVirtualization", xaml)
+        self.assertIn("VirtualizingPanel.VirtualizationMode", xaml)
+        self.assertIn("Clips.Insert", code)
+        self.assertIn("Reconnect YouTube", code)
+        self.assertIn("Reconnect Facebook", code)
+        self.assertIn("DisconnectYoutube_Click", xaml)
+        self.assertIn("DisconnectFacebook_Click", xaml)
+        self.assertIn("YoutubeConnecting", code)
+        self.assertIn("FacebookConnecting", code)
+        self.assertIn("reconnect-backup", backend)
+        self.assertIn("interactive=True", backend)
+        self.assertIn('"/api/disconnect-youtube"', backend)
+        self.assertIn('"/api/disconnect-facebook"', backend)
+        self.assertIn("scheduled_posts_preserved", backend)
+        self.assertIn("CreateNoWindow = true", client)
+        self.assertIn("About_Click", xaml)
+        self.assertNotIn("Support terminal", xaml)
+        self.assertNotIn("SupportConsole_Click", code)
+        self.assertIn("Sifat Jaman / ScarZero", code)
+        self.assertIn("ChatGPT by OpenAI", code)
+        self.assertIn("https://github.com/sifat-jaman-13", code)
+        self.assertIn('https://www.youtube.com/channel/{Uri.EscapeDataString(_state.YoutubeChannelId)}', code)
+        self.assertNotIn("foreach (var page in _state.FacebookPages)", code)
+        self.assertNotIn("CONNECTED FACEBOOK PAGES", code)
+        self.assertNotIn("Platform publishing uses your own Google and Meta authorization", code)
+        self.assertNotIn("support_console.ps1", csproj)
+
+    def test_local_disconnect_removes_tokens_but_preserves_scheduled_database(self):
+        from unittest.mock import Mock
+
+        class Idle:
+            def is_alive(self):
+                return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            token = root / "youtube_token.json"
+            credentials = root / "credentials.json"
+            database = root / "queue.db"
+            token.write_text('{"refresh_token":"test"}', encoding="utf-8")
+            credentials.write_text(
+                '{"yt_channel_title":"Test channel","yt_channel_id":"yt-id",'
+                '"fb_pages":[{"id":"page-id","access_token":"page-token"}],'
+                '"fb_page_access_token":"legacy-token","fb_page_id":"page-id",'
+                '"fb_page_name":"Test Page"}',
+                encoding="utf-8"
+            )
+            db = sqlite3.connect(database)
+            db.execute("CREATE TABLE scheduled(id INTEGER PRIMARY KEY, platform_id TEXT)")
+            db.executemany("INSERT INTO scheduled(platform_id) VALUES (?)", [("yt-id",), ("fb-id",)])
+            db.commit()
+            before = db.execute("SELECT COUNT(*) FROM scheduled").fetchone()[0]
+            db.close()
+
+            fake = SimpleNamespace(
+                worker=Idle(), scan_worker=Idle(), verification_worker=Idle(),
+                secrets={
+                    "yt_channel_title": "Test channel", "yt_channel_id": "yt-id",
+                    "fb_pages": [{"id": "page-id", "access_token": "page-token"}],
+                    "fb_page_access_token": "legacy-token", "fb_page_id": "page-id",
+                    "fb_page_name": "Test Page"
+                },
+                settings={"fb_selected_page_ids": ["page-id"]},
+                log=Mock(), refresh_connections=Mock(), save_settings=Mock(),
+                _ensure_idle_for_disconnect=lambda: None
+            )
+            with patch.object(app, "YT_TOKEN_PATH", token), patch.object(app, "CREDENTIALS_PATH", credentials):
+                backend_service.NativeBackend.disconnect_youtube(fake)
+                self.assertFalse(token.exists())
+                self.assertEqual(fake.secrets["yt_channel_title"], "")
+                backend_service.NativeBackend.disconnect_facebook(fake)
+                self.assertNotIn("fb_pages", fake.secrets)
+                self.assertNotIn("fb_page_access_token", fake.secrets)
+
+            db = sqlite3.connect(database)
+            after = db.execute("SELECT COUNT(*) FROM scheduled").fetchone()[0]
+            db.close()
+            self.assertEqual(before, after)
+            self.assertEqual(after, 2)
+
+    def test_youtube_reconnect_forces_oauth_and_restores_or_replaces_token_safely(self):
+        from unittest.mock import Mock
+
+        class InlineThread:
+            def __init__(self, target, daemon=True):
+                self.target = target
+            def start(self):
+                self.target()
+            def is_alive(self):
+                return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            token = root / "youtube_token.json"
+            credentials_file = root / "credentials.json"
+            token.write_text("old-valid-token", encoding="utf-8")
+            credentials_file.write_text("{}", encoding="utf-8")
+
+            def make_backend(load_credentials):
+                return SimpleNamespace(
+                    _ensure_idle_for_auth=lambda: None,
+                    apply_settings=Mock(),
+                    load_youtube_credentials=load_credentials,
+                    log=Mock(),
+                    emit=Mock(),
+                    refresh_connections=Mock(),
+                    dialogs=SimpleNamespace(showerror=Mock()),
+                    youtube_auth_worker=None,
+                    secrets={"yt_channel_title": "Old channel", "yt_channel_id": "old-id"}
+                )
+
+            with patch.object(app, "YT_TOKEN_PATH", token), patch.object(app, "CREDENTIALS_PATH", credentials_file), patch.object(backend_service.threading, "Thread", InlineThread):
+                failed = make_backend(Mock(side_effect=RuntimeError("OAuth cancelled")))
+                backend_service.NativeBackend.connect_youtube(failed, {})
+                self.assertEqual(token.read_text(encoding="utf-8"), "old-valid-token")
+                self.assertFalse(token.with_name(token.name + ".reconnect-backup").exists())
+
+                def successful_oauth(interactive=False):
+                    self.assertTrue(interactive)
+                    token.write_text("new-token", encoding="utf-8")
+                    return object()
+
+                service = SimpleNamespace(
+                    channels=lambda: SimpleNamespace(
+                        list=lambda **_kwargs: SimpleNamespace(
+                            execute=lambda: {"items": [{"id": "new-id", "snippet": {"title": "New channel"}}]}
+                        )
+                    )
+                )
+                with patch("googleapiclient.discovery.build", return_value=service):
+                    successful = make_backend(successful_oauth)
+                    backend_service.NativeBackend.connect_youtube(successful, {})
+                self.assertEqual(token.read_text(encoding="utf-8"), "new-token")
+                self.assertEqual(successful.secrets["yt_channel_title"], "New channel")
+                self.assertEqual(successful.secrets["yt_channel_id"], "new-id")
+                self.assertFalse(token.with_name(token.name + ".reconnect-backup").exists())
+
+    def test_post_interval_supports_hours_and_minutes_up_to_one_day(self):
+        self.assertEqual(app.MAX_INTERVAL_MINUTES, 1440)
+        self.assertEqual(app.MAX_INTERVAL_MINUTES // 60, 24)
+
+    def test_youtube_slot_allocator_accepts_hour_based_intervals(self):
+        start = datetime.now().astimezone() + timedelta(hours=1)
+        self.assertEqual(app.allocate_youtube_publish_slots([], start, 180), {})
+
+    def test_native_ui_uses_a_hidden_background_python_worker(self):
+        project = Path(app.__file__).resolve().parent
+        client = (project / "native" / "ScarClipScheduler.Wpf" / "BackendClient.cs").read_text(encoding="utf-8")
+        main = (project / "native" / "ScarClipScheduler.Wpf" / "MainWindow.xaml.cs").read_text(encoding="utf-8")
+        self.assertIn("UseShellExecute = false", client)
+        self.assertIn("CreateNoWindow = true", client)
+        self.assertIn("backend_service.py", client)
+        self.assertIn("Waiting for the current upload / scan / verification request", main)
+
+    def test_native_ui_does_not_launch_a_support_terminal(self):
+        project = Path(app.__file__).resolve().parent
+        main = (project / "native" / "ScarClipScheduler.Wpf" / "MainWindow.xaml.cs").read_text(encoding="utf-8")
+        xaml = (project / "native" / "ScarClipScheduler.Wpf" / "MainWindow.xaml").read_text(encoding="utf-8")
+        project_file = (project / "native" / "ScarClipScheduler.Wpf" / "ScarClipScheduler.Wpf.csproj").read_text(encoding="utf-8")
+        self.assertNotIn("StartSupportConsole", main)
+        self.assertNotIn("SupportConsole_Click", main)
+        self.assertNotIn("Support terminal", xaml)
+        self.assertNotIn("support_console.ps1", project_file)
+        self.assertFalse((project / "support_console.ps1").exists())
+
+    def test_about_credits_creator_chatgpt_and_uses_connected_channel_id(self):
+        project = Path(app.__file__).resolve().parent
+        main = (project / "native" / "ScarClipScheduler.Wpf" / "MainWindow.xaml.cs").read_text(encoding="utf-8")
+        backend = (project / "backend_service.py").read_text(encoding="utf-8")
+        models = (project / "native" / "ScarClipScheduler.Wpf" / "Models.cs").read_text(encoding="utf-8")
+        self.assertIn("Sifat Jaman / ScarZero", main)
+        self.assertIn("ChatGPT by OpenAI", main)
+        self.assertIn('var facebookHeader = state.FacebookConnecting', main)
+        self.assertIn('FB: {state.FacebookPages.Count} Pages', main)
+        self.assertNotIn('CONNECTED FACEBOOK PAGES', main)
+        self.assertNotIn('foreach (var page in _state.FacebookPages)', main)
+        self.assertNotIn('ChatGPT does not receive or store those credentials', main)
+        self.assertIn("youtube-shorts-facebook-reels-scheduler", main)
+        self.assertIn("stream-clip-ai", main)
+        self.assertIn("youtube_channel_id", backend)
+        self.assertIn("YoutubeChannelId", models)
 
     def test_stop_queue_requests_graceful_stop_and_disables_button(self):
         class FakeEvent:
@@ -113,9 +297,12 @@ class SchedulerRegressionTests(unittest.TestCase):
         reserved, icon_type, count = struct.unpack("<HHH", icon[:6])
         self.assertEqual((reserved, icon_type), (0, 1))
         self.assertGreaterEqual(count, 3)
-        self.assertIn("ScarClipScheduler.logo.png", (project / "bootstrapper" / "Program.cs").read_text(encoding="utf-8"))
-        self.assertIn("ScarClipScheduler.logo.ico", (project / "bootstrapper" / "Program.cs").read_text(encoding="utf-8"))
-        self.assertIn("/win32icon:", (project / "build_windows_exe.ps1").read_text(encoding="utf-8"))
+        native = project / "native" / "ScarClipScheduler.Wpf"
+        csproj = (native / "ScarClipScheduler.Wpf.csproj").read_text(encoding="utf-8")
+        window = (native / "MainWindow.xaml.cs").read_text(encoding="utf-8")
+        self.assertIn("scarclipscheduler.ico", csproj)
+        self.assertIn("scarclipscheduler-logo.png", csproj)
+        self.assertIn("BitmapFrame.Create", window)
 
     def setUp(self):
         self.now = datetime(2026, 11, 22, 12, 0, tzinfo=ZoneInfo("Asia/Dhaka"))

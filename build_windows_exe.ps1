@@ -1,34 +1,51 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-if (-not (Test-Path $compiler)) {
-    $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
+$project = Join-Path $root 'native\ScarClipScheduler.Wpf\ScarClipScheduler.Wpf.csproj'
+$publish = Join-Path $root 'dist\package'
+$zip = Join-Path $root 'dist\ScarClipScheduler-Windows-x64.zip'
+
+if (Test-Path $publish) {
+    Remove-Item -LiteralPath $publish -Recurse -Force
 }
-if (-not (Test-Path $compiler)) {
-    throw 'The .NET Framework C# compiler (csc.exe) was not found. Run this build on Windows with .NET Framework 4.x installed.'
+if (Test-Path $zip) {
+    Remove-Item -LiteralPath $zip -Force
 }
-$dist = Join-Path $root 'dist'
-New-Item -ItemType Directory -Force -Path $dist | Out-Null
-$output = Join-Path $dist 'ScarClipScheduler.exe'
+New-Item -ItemType Directory -Force -Path $publish | Out-Null
+
+Write-Host 'Publishing ScarClipScheduler 2.0.2 (native WPF, self-contained .NET 10)...'
 $arguments = @(
-    '/nologo',
-    '/target:exe',
-    '/platform:anycpu',
-    "/out:$output",
-    "/win32icon:$(Join-Path $root 'assets\scarclipscheduler.ico')",
-    "/resource:$(Join-Path $root 'app.py'),ScarClipScheduler.app.py",
-    "/resource:$(Join-Path $root 'requirements.txt'),ScarClipScheduler.requirements.txt",
-    "/resource:$(Join-Path $root 'assets\scarclipscheduler-logo.png'),ScarClipScheduler.logo.png",
-    "/resource:$(Join-Path $root 'assets\scarclipscheduler.ico'),ScarClipScheduler.logo.ico",
-    (Join-Path $root 'bootstrapper\Program.cs')
+    'publish', $project,
+    '-c', 'Release',
+    '-r', 'win-x64',
+    '--self-contained', 'true',
+    '-p:PublishSingleFile=true',
+    '-p:IncludeNativeLibrariesForSelfExtract=true',
+    '-p:EnableCompressionInSingleFile=true',
+    '-p:DebugType=None',
+    '-p:DebugSymbols=false',
+    '-o', $publish
 )
-Write-Host 'Building the self-contained ScarClipScheduler terminal bootstrapper...'
-& $compiler @arguments
+dotnet @arguments
 if ($LASTEXITCODE -ne 0) {
-    throw "C# compilation failed with exit code $LASTEXITCODE."
+    throw "WPF publish failed with exit code $LASTEXITCODE."
 }
-if (-not (Test-Path $output)) {
-    throw 'The compiler returned successfully but the EXE file was not created.'
-}
-Write-Host "Built: $output"
-Get-Item $output | Select-Object FullName, Length, LastWriteTime | Format-List
+
+$exe = Join-Path $publish 'ScarClipScheduler.exe'
+$backend = Join-Path $publish 'backend\backend_service.py'
+$requirements = Join-Path $publish 'backend\requirements.txt'
+$workerSource = Join-Path $publish 'backend\app.py'
+$setup = Join-Path $publish 'Install-ScarClipScheduler.ps1'
+if (-not (Test-Path $exe)) { throw 'Native WPF EXE was not produced.' }
+if (-not (Test-Path $backend)) { throw 'Background publishing worker was not packaged.' }
+if (-not (Test-Path $workerSource)) { throw 'Publishing engine source was not packaged.' }
+if (-not (Test-Path $requirements)) { throw 'Backend requirements were not packaged.' }
+
+Copy-Item -LiteralPath (Join-Path $root 'Install-ScarClipScheduler.ps1') -Destination $setup -Force
+Copy-Item -LiteralPath (Join-Path $root 'README-INSTALL.txt') -Destination (Join-Path $publish 'README-INSTALL.txt') -Force
+
+# Keep a convenient local EXE output, but publish the complete application as a ZIP.
+Copy-Item -LiteralPath $exe -Destination (Join-Path $root 'dist\ScarClipScheduler.exe') -Force
+Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $zip -CompressionLevel Optimal -Force
+
+Write-Host 'Native WPF package build complete.'
+Get-Item $exe, $zip, $backend, $requirements | Select-Object FullName, Length | Format-Table -AutoSize

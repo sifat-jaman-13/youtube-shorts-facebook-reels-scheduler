@@ -1,0 +1,49 @@
+name: Publish Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish native Windows package
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install publishing-worker dependencies
+        shell: powershell
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run Python regression suite
+        shell: powershell
+        run: |
+          python -m py_compile app.py backend_service.py
+          python -m unittest discover -s tests -v
+
+      - name: Build native Windows ZIP
+        shell: powershell
+        run: .\build_windows_exe.ps1
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/ScarClipScheduler-Windows-x64.zip
