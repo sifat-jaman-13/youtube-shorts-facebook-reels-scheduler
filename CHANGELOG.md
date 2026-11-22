@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.4] - 2026-11-22
+
+### Fixed
+
+- Added an explicit **Uninstall ScarClipScheduler** shortcut to the Start Menu app group.
+- Documented the uninstall path and clarified that uninstalling preserves the separate local user-data directory.
+
 ## [2.0.3] - 2026-11-22
 
 ### Changed
