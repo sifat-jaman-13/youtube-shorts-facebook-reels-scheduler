@@ -68,10 +68,19 @@ jobs:
               github.rest.repos.listReleases,
               { owner, repo, per_page: 100 }
             );
+            const publishedReleases = releases
+              .filter(release => !release.draft && release.published_at)
+              .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
+            const latestRelease = publishedReleases[0];
+
+            if (!latestRelease) {
+              throw new Error("No published release was found after publishing the current tag.");
+            }
+            core.info(`Keeping the newest published release: ${latestRelease.tag_name} (workflow tag: ${currentTag})`);
 
             let deletedCount = 0;
             for (const release of releases) {
-              if (release.tag_name === currentTag || release.draft) {
+              if (release.id === latestRelease.id || release.draft) {
                 continue;
               }
 
@@ -91,4 +100,4 @@ jobs:
               }
             }
 
-            core.notice(`Removed ${deletedCount} uploaded asset(s) from older releases. Current release ${currentTag} keeps its assets.`);
+            core.notice(`Removed ${deletedCount} uploaded asset(s) from older releases. Newest release ${latestRelease.tag_name} keeps its assets.`);
