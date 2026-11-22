@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.18] - 2026-11-22
+- Reconcile legacy clips already marked Scheduled when their MP4/TXT pair is still stored outside the You can delete this folder, including older schedule directories.
+- Re-check every original YouTube channel and Facebook Page destination before moving a legacy Scheduled pair; incomplete uploads remain in the active source folder.
+- Skip database records whose MP4 is already missing instead of attempting a nonexistent move; preserve their permanent upload receipts.
+- Add regression coverage for accepted and partially accepted legacy Scheduled clips.
 ## [2.0.17] - 2026-11-22
 
 ### Added

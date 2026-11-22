@@ -22,7 +22,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "2.0.17"
+APP_VERSION = "2.0.18"
 MAX_INTERVAL_MINUTES = 24 * 60
 UPLOAD_PROTECTED_STATES = ("Uploading", "Partial", "Uploaded", "Scheduled", "Published", "Unknown", "Duplicate blocked")
 UPLOAD_RETRYABLE_STATES = ("Failed", "Retryable")
@@ -1853,20 +1853,31 @@ class SchedulerApp:
                 encoding="utf-8"
             )
 
-        # Re-check older queue rows on startup/scan. Any old Scheduled clip
-        # (including one previously stored under a schedule/ subfolder) is moved
-        # here only when every originally selected destination has an accepted
-        # status and a real external video/Reel ID.
+        # Reconcile both Detected rows and legacy Scheduled rows that still point
+        # outside the current Safe folder. Older builds stored API-accepted clips
+        # under a schedule/ directory with storage_state='scheduled'; scanning
+        # only source rows stranded those files outside "You can delete this".
+        # Re-evaluate the original destination scope before moving anything:
+        # every planned destination must still have an accepted status and ID.
         with self.db_lock:
-            existing_source_rows = self.conn.execute(
-                "SELECT path FROM clips WHERE storage_state='source'"
+            reconciliation_rows = self.conn.execute(
+                "SELECT path FROM clips WHERE storage_state IN ('source','scheduled')"
             ).fetchall()
-        for item in existing_source_rows:
+        for item in reconciliation_rows:
+            clip_path = Path(str(item["path"]))
             try:
-                self.organize_clip_after_upload(str(item["path"]))
+                if clip_path.parent.resolve() == current_safe_folder.resolve():
+                    continue
+            except OSError:
+                pass
+            # A database row may outlive a missing local MP4. Do not invent or
+            # recreate media from metadata; leave its permanent upload receipts.
+            if not clip_path.is_file():
+                continue
+            try:
+                self.organize_clip_after_upload(str(clip_path))
             except Exception as exc:
-                self.log(f"Could not migrate accepted clip {Path(item['path']).name}: {exc}")
-
+                self.log(f"Could not reconcile accepted clip {clip_path.name}: {exc}")
     def move_clip_files(self, old_path, folder_name):
         """Move an MP4/TXT pair, preserve its ledger receipts, and update queue paths atomically."""
         source_video = Path(old_path)

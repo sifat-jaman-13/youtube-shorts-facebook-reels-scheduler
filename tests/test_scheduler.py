@@ -677,6 +677,105 @@ class SchedulerRegressionTests(unittest.TestCase):
             )
             instance.conn.close()
 
+    def test_startup_reconciles_legacy_scheduled_folder_into_safe_only_when_all_destinations_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy_folder = root / "schedule"
+            legacy_folder.mkdir()
+            accepted_video = legacy_folder / "accepted-legacy.mp4"
+            accepted_txt = legacy_folder / "accepted-legacy.txt"
+            accepted_video.write_bytes(b"accepted legacy media")
+            accepted_txt.write_text("Accepted title\\nAccepted description", encoding="utf-8")
+
+            pending_video = legacy_folder / "pending-legacy.mp4"
+            pending_txt = legacy_folder / "pending-legacy.txt"
+            pending_video.write_bytes(b"pending legacy media")
+            pending_txt.write_text("Pending title\\nPending description", encoding="utf-8")
+
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.RLock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.folder_var = SimpleNamespace(get=lambda: str(root))
+            instance.selected_path = None
+            instance.txt_preview_cache = {}
+            instance.log = lambda _message: None
+            instance.youtube_var = SimpleNamespace(get=lambda: True)
+            instance.facebook_var = SimpleNamespace(get=lambda: True)
+            instance.get_selected_fb_pages = lambda: [{"id": "page-a", "name": "Page A"}]
+            instance.upload_destination_id = lambda _platform: "youtube-channel"
+            instance.secrets = {
+                "yt_channel_id": "youtube-channel",
+                "yt_channel_title": "Test YouTube",
+                "fb_pages": [{"id": "page-a", "name": "Page A"}],
+            }
+
+            for path, title, yt_id, fb_status, fb_id in (
+                (accepted_video, "Accepted title", "yt-accepted", "Scheduled", "fb-accepted"),
+                (pending_video, "Pending title", "yt-pending", "Pending", None),
+            ):
+                instance.db_execute(
+                    """INSERT INTO clips(path,title,description,yt_status,yt_video_id,
+                       publish_at,storage_state,safe_to_delete)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (str(path), title, "Description", "Scheduled", yt_id,
+                     self.now.isoformat(), "scheduled", 0)
+                )
+                instance.db_execute(
+                    """INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id)
+                       VALUES(?,?,?,?,?,?)""",
+                    (str(path), "page-a", "Page A", self.now.isoformat(), fb_status, fb_id)
+                )
+                for platform, destination, status, external_id in (
+                    ("youtube", "youtube-channel", "Scheduled", yt_id),
+                    ("facebook", "page-a", fb_status, fb_id),
+                ):
+                    instance.db_execute(
+                        """INSERT INTO upload_ledger(
+                            video_name,scheduled_at,platform,destination_id,source_path,
+                            content_sha256,status,external_id,created_at,updated_at
+                        ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                        (path.name, self.now.isoformat(), platform, destination,
+                         str(path), ("e" * 63) + ("1" if path.name.startswith("accepted") else "2"), status, external_id,
+                         self.now.isoformat(), self.now.isoformat())
+                    )
+
+            instance.ensure_output_folders()
+
+            safe = root / app.SAFE_TO_DELETE_FOLDER
+            safe_video = safe / accepted_video.name
+            self.assertTrue(safe_video.is_file())
+            self.assertTrue(safe_video.with_suffix(".txt").is_file())
+            self.assertFalse(accepted_video.exists())
+            self.assertFalse(accepted_txt.exists())
+
+            restored_pending = root / pending_video.name
+            self.assertTrue(restored_pending.is_file())
+            self.assertTrue(restored_pending.with_suffix(".txt").is_file())
+            self.assertFalse(pending_video.exists())
+            self.assertFalse(pending_txt.exists())
+
+            rows = {Path(row["path"]).name: row for row in instance.get_clips()}
+            self.assertEqual(rows[safe_video.name]["path"], str(safe_video))
+            self.assertEqual(rows[safe_video.name]["storage_state"], "scheduled")
+            self.assertEqual(rows[safe_video.name]["safe_to_delete"], 1)
+            self.assertEqual(rows[restored_pending.name]["path"], str(restored_pending))
+            self.assertEqual(rows[restored_pending.name]["storage_state"], "source")
+            self.assertEqual(rows[restored_pending.name]["safe_to_delete"], 0)
+            self.assertEqual(
+                instance.conn.execute(
+                    "SELECT source_path FROM upload_ledger WHERE video_name=? AND platform='youtube'",
+                    (safe_video.name,)
+                ).fetchone()["source_path"],
+                str(safe_video)
+            )
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM upload_ledger").fetchone()[0],
+                4
+            )
+            self.assertEqual(instance.conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            instance.conn.close()
     def test_original_planned_destinations_stay_required_after_settings_toggles_change(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
