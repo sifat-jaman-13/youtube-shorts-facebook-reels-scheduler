@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -81,8 +81,8 @@ def validate_future_start_at(value, now=None):
         raise ValueError("Choose a valid first post date and time (YYYY-MM-DD HH:mm).") from exc
 
     current = now if now is not None else datetime.now()
-    if start <= current:
-        raise ValueError("The first post date and time must be later than the current local time.")
+    if start < current + timedelta(minutes=15):
+        raise ValueError("The first post date and time must be at least 15 minutes later than the current local time.")
     return start
 
 
@@ -220,7 +220,8 @@ class NativeBackend(core.SchedulerApp):
         if "start_at" in data:
             self.start_var.set(str(data["start_at"]))
         if "interval_minutes" in data:
-            self.interval_var.set(str(max(1, min(core.MAX_INTERVAL_MINUTES, int(data["interval_minutes"])))))
+            interval = core.validate_interval_minutes(data["interval_minutes"])
+            self.interval_var.set(str(interval))
         for key, var in (
             ("youtube_enabled", self.youtube_var),
             ("facebook_enabled", self.facebook_var),

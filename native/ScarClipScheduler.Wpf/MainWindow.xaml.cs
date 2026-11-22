@@ -28,6 +28,10 @@ public partial class MainWindow : Window
     private long _lastEventId;
     private bool _allowClose;
     private bool _initialStateApplied;
+    private bool _applyingScheduleInputs;
+    private bool _startTimeConfirmed;
+    private DateTime? _confirmedStartAt;
+    private int _confirmedInterval;
     private bool _shutdownInProgress;
     private bool _showAllAccepted;
     private string? _selectedMetadataPath;
@@ -38,7 +42,7 @@ public partial class MainWindow : Window
         var appIcon = Path.Combine(AppContext.BaseDirectory, "backend", "assets", "scarclipscheduler.ico");
         if (File.Exists(appIcon))
             Icon = BitmapFrame.Create(new Uri(appIcon, UriKind.Absolute));
-        Title = "ScarClipScheduler 2.0.13";
+        Title = "ScarClipScheduler 2.0.14";
         DataContext = this;
         ClipGrid.ItemsSource = Clips;
         StartDate.DisplayDateStart = DateTime.Today;
@@ -210,20 +214,33 @@ public partial class MainWindow : Window
 
     private void ApplyScheduleInputs(NativeState state)
     {
-        StartDate.DisplayDateStart = DateTime.Today;
-        if (DateTime.TryParse(state.StartAt, out var start) &&
-            start.Date >= DateTime.Today && start > DateTime.Now)
+        _applyingScheduleInputs = true;
+        try
         {
-            SetStartDateTime(start);
-        }
-        else
-        {
-            SetDefaultStartTime();
-        }
+            StartDate.DisplayDateStart = DateTime.Today;
+            if (DateTime.TryParse(state.StartAt, out var start) &&
+                start.Date >= DateTime.Today && start > DateTime.Now)
+            {
+                SetStartDateTime(start);
+            }
+            else
+            {
+                SetDefaultStartTime();
+            }
 
-        var interval = Math.Clamp(state.IntervalMinutes, 1, 1440);
-        IntervalHours.Text = (interval / 60).ToString();
-        IntervalMinutes.Text = (interval % 60).ToString();
+            var interval = Math.Clamp(state.IntervalMinutes, 5, 1440);
+            IntervalHours.Text = (interval / 60).ToString();
+            IntervalMinutes.Text = (interval % 60).ToString();
+        }
+        finally
+        {
+            _applyingScheduleInputs = false;
+        }
+        _startTimeConfirmed = false;
+        _confirmedStartAt = null;
+        StartConfirmationText.Text = "Start time not confirmed.";
+        StartConfirmationText.Foreground = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(251, 191, 36));
     }
 
     private static void SetTextWhenNotFocused(TextBox box, string value)
@@ -332,8 +349,9 @@ public partial class MainWindow : Window
     {
         var serviceReady = _api is not null;
         var busy = state.Busy;
-        foreach (var button in new[] { NavQueue, NavConnections, NavActivity })
+        foreach (var button in new[] { NavQueue, NavConnections, NavActivity, NavHowTo })
             button.IsEnabled = serviceReady;
+        ConfirmStartButton.IsEnabled = serviceReady && !busy;
 
         ScanButton.IsEnabled = serviceReady && !busy;
         ScheduleButton.IsEnabled = serviceReady && !busy;
@@ -433,6 +451,17 @@ public partial class MainWindow : Window
         SetStartDateTime(target);
     }
 
+    private void ScheduleInput_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_initialStateApplied || _applyingScheduleInputs)
+            return;
+        _startTimeConfirmed = false;
+        _confirmedStartAt = null;
+        StartConfirmationText.Text = "Changed ? confirm the start time again.";
+        StartConfirmationText.Foreground = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(251, 191, 36));
+    }
+
     private void StartMinute_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
     {
         e.Handled = !e.Text.All(char.IsDigit);
@@ -462,15 +491,18 @@ public partial class MainWindow : Window
     private void NavQueue_Click(object sender, RoutedEventArgs e) => ShowPage("queue");
     private void NavConnections_Click(object sender, RoutedEventArgs e) => ShowPage("connections");
     private void NavActivity_Click(object sender, RoutedEventArgs e) => ShowPage("activity");
+    private void NavHowTo_Click(object sender, RoutedEventArgs e) => ShowPage("howto");
 
     private void ShowPage(string page)
     {
         QueuePage.Visibility = page == "queue" ? Visibility.Visible : Visibility.Collapsed;
         ConnectionsPage.Visibility = page == "connections" ? Visibility.Visible : Visibility.Collapsed;
         ActivityPage.Visibility = page == "activity" ? Visibility.Visible : Visibility.Collapsed;
+        HowToPage.Visibility = page == "howto" ? Visibility.Visible : Visibility.Collapsed;
         NavQueue.Background = page == "queue" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
         NavConnections.Background = page == "connections" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
         NavActivity.Background = page == "activity" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
+        NavHowTo.Background = page == "howto" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
     }
 
     private void HideAccepted_Changed(object sender, RoutedEventArgs e)
@@ -497,10 +529,60 @@ public partial class MainWindow : Window
         catch (Exception ex) { ShowError("Scan could not start", ex.Message); }
     }
 
+    private async void ConfirmStartTime_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = BuildSettingsPayload();
+            var start = GetSelectedStartDateTime();
+            var minimum = DateTime.Now.AddMinutes(15);
+            if (start < minimum)
+            {
+                _startTimeConfirmed = false;
+                _confirmedStartAt = null;
+                ShowWarning("Choose a later start time",
+                    "The first post must be at least 15 minutes from now. Change the time and confirm it again.");
+                return;
+            }
+
+            await RequireApi().PostAsync("api/settings", settings);
+            _confirmedStartAt = start;
+            _confirmedInterval = (int)settings["interval_minutes"]!;
+            _startTimeConfirmed = true;
+            var interval = TimeSpan.FromMinutes(_confirmedInterval);
+            StartConfirmationText.Text =
+                $"CONFIRMED: {start:ddd, dd MMM yyyy h:mm tt} | every " +
+                $"{(int)interval.TotalHours}h {interval.Minutes}m";
+            StartConfirmationText.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(52, 211, 153));
+            FooterStatus.Text = "Start time and interval confirmed and saved.";
+            AddActivity($"Start time confirmed: {start:yyyy-MM-dd HH:mm}; interval {_confirmedInterval} minutes.");
+        }
+        catch (Exception ex) { ShowError("Start time could not be confirmed", ex.Message); }
+    }
+
     private async void Schedule_Click(object sender, RoutedEventArgs e)
     {
         try
         {
+            var selectedStart = GetSelectedStartDateTime();
+            var selectedSettings = BuildSettingsPayload();
+            if (!_startTimeConfirmed || _confirmedStartAt != selectedStart ||
+                _confirmedInterval != (int)selectedSettings["interval_minutes"]!)
+            {
+                ShowWarning("Confirm the start time first",
+                    "Click Confirm start time after choosing the date, time, and interval. Any later edits require a new confirmation.");
+                return;
+            }
+            if (selectedStart < DateTime.Now.AddMinutes(15))
+            {
+                _startTimeConfirmed = false;
+                _confirmedStartAt = null;
+                ShowWarning("Confirm a later start time",
+                    "The selected first-post time is now too close. Choose a time at least 15 minutes ahead and confirm it again.");
+                return;
+            }
+
             if (RightsCheck.IsChecked != true)
             {
                 ShowWarning("Publishing rights", "Confirm that you own these clips or have permission to repost them and that the uploads comply with platform rules.");
@@ -508,7 +590,7 @@ public partial class MainWindow : Window
             }
 
             StartDate.DisplayDateStart = DateTime.Today;
-            var settings = BuildSettingsPayload();
+            var settings = selectedSettings;
             var requestedStart = DateTime.Parse((string)settings["start_at"]!);
             if (requestedStart <= DateTime.Now)
             {
@@ -544,8 +626,9 @@ public partial class MainWindow : Window
                 $"Interval: {interval / 60} hour(s), {interval % 60} minute(s)\n" +
                 $"Platforms: {platforms}\n" +
                 $"Facebook Pages: {(selectedPages.Count == 0 ? "none selected" : string.Join(", ", Pages.Where(page => page.Selected).Select(page => page.Name)))}\n\n" +
-                "The app uploads the files now and asks the selected platforms to publish at the chosen times. " +
-                "Already accepted platform schedules are not resubmitted.";
+                "The first clip uses the confirmed start time; later clips follow the chosen interval. " +
+                "YouTube and Facebook quota limits can defer remaining work to the next eligible day. " +
+                "Rejected destinations receive a tomorrow retry slot. Already accepted platform schedules are never resubmitted.";
             if (MessageBox.Show(this, prompt, "Confirm scheduling", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
@@ -743,8 +826,8 @@ public partial class MainWindow : Window
         if (hours == 24 && minutes != 0)
             throw new InvalidOperationException("A 24-hour interval cannot contain additional minutes.");
         var total = hours * 60 + minutes;
-        if (total < 1 || total > 1440)
-            throw new InvalidOperationException("The interval must be between 1 minute and 24 hours.");
+        if (total < 5 || total > 1440)
+            throw new InvalidOperationException("The interval must be between 5 minutes and 24 hours.");
 
         var category = (CategoryBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "20";
         return new Dictionary<string, object?>
@@ -826,7 +909,7 @@ public partial class MainWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.13  |  Native Windows application",
+            Text = "Version 2.0.14  |  Native Windows application",
             FontSize = 12,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(154, 168, 196)),
             Margin = new Thickness(0, 0, 0, 14)

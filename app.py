@@ -21,7 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "2.0.13"
+APP_VERSION = "2.0.14"
 MAX_INTERVAL_MINUTES = 24 * 60
 APP_DIR = Path(__file__).resolve().parent
 ASSET_DIR = APP_DIR / "assets"
@@ -128,6 +128,17 @@ def local_now():
     return datetime.now().astimezone()
 
 
+def validate_interval_minutes(value):
+    """Validate the supported posting interval: five minutes through 24 hours."""
+    try:
+        interval = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Interval must be a whole number of minutes.") from exc
+    if not 5 <= interval <= MAX_INTERVAL_MINUTES:
+        raise ValueError(f"Interval must be between 5 minutes and {MAX_INTERVAL_MINUTES} minutes (24 hours).")
+    return interval
+
+
 def next_pacific_midnight(moment=None):
     moment = moment or local_now()
     pacific = ZoneInfo("America/Los_Angeles")
@@ -138,15 +149,14 @@ def next_pacific_midnight(moment=None):
 
 
 def allocate_youtube_publish_slots(rows, start, interval, now=None):
-    """Keep accepted/future slots; reassign missing or expired pending slots safely.
+    """Allocate requested slots while preserving accepted destinations.
 
-    The allocator appends retries after the latest still-future planned destination,
-    enforces 100 publication slots per Pacific calendar day, and never rewrites
-    already accepted Scheduled/Published YouTube jobs.
+    Existing accepted YouTube posts are never rewritten. Pending destinations with
+    an already reserved future retry slot keep it; new pending destinations begin
+    at the user's chosen start time. The YouTube daily quota is enforced per
+    Pacific calendar day.
     """
-    if not 1 <= int(interval) <= MAX_INTERVAL_MINUTES:
-        raise ValueError(f"Interval must be between 1 and {MAX_INTERVAL_MINUTES} minutes (24 hours).")
-
+    interval = validate_interval_minutes(interval)
     now = now or local_now()
     if start.tzinfo is None:
         start = start.astimezone()
@@ -168,7 +178,6 @@ def allocate_youtube_publish_slots(rows, start, interval, now=None):
         if status in accepted:
             # An accepted post is never re-uploaded or rescheduled by this helper.
             if publish_at and publish_at > now:
-                future_slots.append(publish_at)
                 day = publish_at.astimezone(pacific).date()
                 daily_counts[day] = daily_counts.get(day, 0) + 1
             continue
@@ -193,9 +202,8 @@ def allocate_youtube_publish_slots(rows, start, interval, now=None):
     for row in needs_slot:
         while daily_counts.get(cursor.date(), 0) >= 100:
             next_day = cursor.date() + timedelta(days=1)
-            cursor = datetime.combine(
-                next_day, datetime.min.time().replace(hour=4), tzinfo=pacific
-            )
+            selected_clock = start.astimezone(pacific).timetz().replace(tzinfo=None)
+            cursor = datetime.combine(next_day, selected_clock, tzinfo=pacific)
 
         path = str(row["path"])
         assignments[path] = cursor.astimezone(start.tzinfo).isoformat()
@@ -632,7 +640,7 @@ class SchedulerApp:
         ttk.Entry(row1, textvariable=self.start_var, width=19).pack(side="left", padx=(7, 14))
         ttk.Label(row1, text="Format: YYYY-MM-DD HH:MM").pack(side="left")
         ttk.Label(row1, text="Interval:").pack(side="left", padx=(22, 4))
-        ttk.Spinbox(row1, from_=1, to=120, width=5, textvariable=self.interval_var).pack(side="left")
+        ttk.Spinbox(row1, from_=5, to=1440, width=6, textvariable=self.interval_var).pack(side="left")
         ttk.Label(row1, text="minutes").pack(side="left", padx=(4, 0))
 
         row2 = ttk.Frame(schedule_box)
@@ -1873,8 +1881,10 @@ class SchedulerApp:
             rows = self.get_clips()
             yt_pending = sum(1 for r in rows if r["yt_status"] not in {"Scheduled", "Published"})
             recommended = suggested_start(yt_pending, self.youtube_var.get())
-            self.root.after(0, lambda: self.start_var.set(recommended.strftime("%Y-%m-%d %H:%M")))
-            self.root.after(0, self.save_settings)
+            self.log(
+                f"Suggested first-post time: {recommended.strftime('%Y-%m-%d %H:%M')} local time. "
+                "Your chosen start time is unchanged; review it and press Confirm start time."
+            )
             if ffprobe_path():
                 bad = [r for r in rows if r["fb_ok"] == 0]
                 self.log(f"Facebook Reel format check: {len(rows) - len(bad)}/{len(rows)} clips pass 9:16 and 4–60 second checks.")
@@ -2207,26 +2217,31 @@ class SchedulerApp:
                 return
         try:
             start = datetime.strptime(self.start_var.get().strip(), "%Y-%m-%d %H:%M").astimezone()
-            interval = int(self.interval_var.get())
-            if interval < 1 or interval > MAX_INTERVAL_MINUTES:
-                raise ValueError(f"Interval must be between 1 and {MAX_INTERVAL_MINUTES} minutes (24 hours).")
+            interval = validate_interval_minutes(self.interval_var.get())
         except Exception as exc:
             messagebox.showerror("Invalid schedule", str(exc))
             return
 
         minimum_start = local_now() + timedelta(minutes=15)
         if start < minimum_start:
-            start = minimum_start
-            self.start_var.set(start.strftime("%Y-%m-%d %H:%M"))
-            self.log("Start time was too close to now; moved it at least 15 minutes ahead.")
+            raise ValueError(
+                "The confirmed first-post time must be at least 15 minutes from now. "
+                "Choose a later time and confirm it again."
+            )
 
-        # Keep accepted/future YouTube slots, but reassign pending clips whose
-        # publishAt has expired or is missing (for example after an interrupted run).
+        # Respect the user's confirmed start time. YouTube quota pauses are
+        # handled by the worker and deferred items are shifted to the next day.
         if yt_enabled:
-            if len(rows) > 100 and start < suggested_start(len(rows), True):
-                start = suggested_start(len(rows), True)
-                self.start_var.set(start.strftime("%Y-%m-%d %H:%M"))
-            youtube_slots = allocate_youtube_publish_slots(rows, start, interval)
+            # A newly confirmed schedule replaces reservations for every unaccepted
+            # clip, but already accepted YouTube posts retain their original times.
+            allocation_rows = []
+            for queue_row in rows:
+                allocation_row = dict(queue_row)
+                status = str(allocation_row.get("yt_status") or "Pending").strip().lower()
+                if status not in {"scheduled", "published"}:
+                    allocation_row["publish_at"] = None
+                allocation_rows.append(allocation_row)
+            youtube_slots = allocate_youtube_publish_slots(allocation_rows, start, interval)
             for path, slot in youtube_slots.items():
                 self.db_execute(
                     "UPDATE clips SET publish_at=? WHERE path=?",
@@ -2238,25 +2253,28 @@ class SchedulerApp:
         if fb_enabled:
             for page in selected_pages:
                 page_id = str(page["id"])
-                with self.db_lock:
-                    count = self.conn.execute(
-                        "SELECT COUNT(*) FROM facebook_page_jobs WHERE page_id=?",
-                        (page_id,)
-                    ).fetchone()[0]
-                sequence = count
+                sequence = 0
                 for row in rows:
-                    if self.get_fb_job(row["path"], page_id):
+                    job = self.get_fb_job(row["path"], page_id)
+                    if job and str(job.get("status") or "Pending") in {"Scheduled", "Published"}:
                         continue
-                    batch = sequence // 30
-                    position = sequence % 30
-                    slot = start + timedelta(days=batch, minutes=batch * 5 + position * interval)
-                    self.db_execute(
-                        """INSERT OR IGNORE INTO facebook_page_jobs
-                        (path,page_id,page_name,publish_at,status)
-                        VALUES (?,?,?,?, 'Pending')""",
-                        (row["path"], page_id, page.get("name") or page_id, slot.astimezone().isoformat())
-                    )
+                    if job and str(job.get("status") or "").startswith("Skipped"):
+                        continue
+                    slot = start + timedelta(minutes=sequence * interval)
                     sequence += 1
+                    if job:
+                        self.db_execute(
+                            """UPDATE facebook_page_jobs SET publish_at=?
+                            WHERE path=? AND page_id=? AND status NOT IN ('Scheduled','Published')""",
+                            (slot.astimezone().isoformat(), row["path"], page_id)
+                        )
+                    else:
+                        self.db_execute(
+                            """INSERT INTO facebook_page_jobs
+                            (path,page_id,page_name,publish_at,status)
+                            VALUES (?,?,?,?, 'Pending')""",
+                            (row["path"], page_id, page.get("name") or page_id, slot.astimezone().isoformat())
+                        )
                 with self.db_lock:
                     latest = self.conn.execute(
                         "SELECT MAX(publish_at) FROM facebook_page_jobs WHERE page_id=?",
@@ -2367,7 +2385,7 @@ class SchedulerApp:
         try:
             rows = self.filter_queue_rows(self.get_clips(), clip_paths)
             self.log("Queue processing started.")
-            for row in rows:
+            for row_index, row in enumerate(rows):
                 if self.stop_event.is_set():
                     break
                 path = row["path"]
@@ -2399,19 +2417,63 @@ class SchedulerApp:
                             except Exception as exc:
                                 if self.is_youtube_quota_error(exc):
                                     reset = next_pacific_midnight()
+                                    retry_start = max(
+                                        reset + timedelta(minutes=15),
+                                        publish_at,
+                                        local_now() + timedelta(minutes=15),
+                                    )
+                                    retry_interval = validate_interval_minutes(self.interval_var.get() or 5)
+                                    # Rebuild all unaccepted YouTube slots after the quota reset.
+                                    # The allocator keeps accepted posts untouched and enforces
+                                    # the existing 100-slot Pacific-day cap for every later day.
+                                    retry_rows = []
+                                    for future_row in rows:
+                                        retry_row = dict(future_row)
+                                        future_status = str(retry_row.get("yt_status") or "Pending").strip().lower()
+                                        if future_status not in {"scheduled", "published"}:
+                                            retry_row["publish_at"] = None
+                                        retry_rows.append(retry_row)
+                                    retry_slots = allocate_youtube_publish_slots(
+                                        retry_rows, retry_start, retry_interval, now=local_now()
+                                    )
+                                    updated_slots = 0
+                                    for retry_path, retry_slot in retry_slots.items():
+                                        self.db_execute(
+                                            "UPDATE clips SET publish_at=? WHERE path=?",
+                                            (retry_slot, retry_path)
+                                        )
+                                        for future_row in rows:
+                                            if future_row["path"] == retry_path:
+                                                future_row["publish_at"] = retry_slot
+                                                break
+                                        updated_slots += 1
+                                    publish_at = datetime.fromisoformat(row["publish_at"]).astimezone()
                                     wait_seconds = max(30, (reset - local_now()).total_seconds())
                                     self.log(
-                                        f"YouTube daily upload quota reached. Pausing until "
-                                        f"{reset.strftime('%Y-%m-%d %H:%M')} local time."
+                                        f"YouTube daily upload quota reached. {updated_slots} unaccepted YouTube "
+                                        f"clips were moved to the next available quota windows, starting "
+                                        f"{retry_start.strftime('%Y-%m-%d %H:%M')} local time, using the selected "
+                                        f"{retry_interval}-minute interval and the 100-per-Pacific-day limit. "
+                                        f"Pausing until quota reset at {reset.strftime('%Y-%m-%d %H:%M')}."
                                     )
                                     if self.stop_event.wait(wait_seconds):
                                         break
                                     continue
-                                self.db_execute(
-                                    "UPDATE clips SET yt_status='Error', yt_error=? WHERE path=?",
-                                    (str(exc)[:1500], path)
+                                retry_at = max(
+                                    publish_at + timedelta(days=1),
+                                    local_now() + timedelta(days=1, minutes=15),
                                 )
-                                self.log(f"YouTube failed for {name}: {exc}")
+                                reason = str(exc)[:1100]
+                                self.db_execute(
+                                    "UPDATE clips SET yt_status='Error', yt_error=?, publish_at=? WHERE path=?",
+                                    (f"{reason} | Retry slot reserved for {retry_at.strftime('%Y-%m-%d %H:%M')}. "
+                                     "Reset failed and start the queue to retry.", retry_at.isoformat(), path)
+                                )
+                                self.log(
+                                    f"YouTube rejected {name}: {exc}. Its retry slot is reserved for "
+                                    f"{retry_at.strftime('%Y-%m-%d %H:%M')} local time tomorrow; "
+                                    "use Reset failed and start the queue to retry it."
+                                )
                                 break
 
                 if self.stop_event.is_set():
@@ -2449,9 +2511,14 @@ class SchedulerApp:
                                 ).fetchone()[0]
                             if last_scheduled:
                                 last_dt = datetime.fromisoformat(last_scheduled).astimezone()
-                                minimum_publish = max(minimum_publish, last_dt + timedelta(
-                                    minutes=max(1, int(self.settings.get("interval", 5) or 5))
-                                ))
+                                # A previously accepted post scheduled later than this
+                                # confirmed batch must not push the new batch forward.
+                                # Only preserve spacing when the latest accepted slot
+                                # actually precedes this clip's assigned publish time.
+                                if last_dt < publish_at:
+                                    minimum_publish = max(minimum_publish, last_dt + timedelta(
+                                        minutes=validate_interval_minutes(self.settings.get("interval", 5) or 5)
+                                    ))
                             if publish_at < minimum_publish:
                                 publish_at = minimum_publish
                                 self.db_execute(
@@ -2480,11 +2547,22 @@ class SchedulerApp:
                                 f"{publish_at.strftime('%Y-%m-%d %H:%M')}"
                             )
                         except Exception as exc:
-                            self.db_execute(
-                                "UPDATE facebook_page_jobs SET status='Error', error=? WHERE path=? AND page_id=?",
-                                (str(exc)[:1500], path, page_id)
+                            retry_base = datetime.fromisoformat(job["publish_at"]).astimezone()
+                            retry_at = max(
+                                retry_base + timedelta(days=1),
+                                local_now() + timedelta(days=1, minutes=15),
                             )
-                            self.log(f"Facebook failed on {page.get('name')} for {name}: {exc}")
+                            reason = str(exc)[:1100]
+                            self.db_execute(
+                                "UPDATE facebook_page_jobs SET status='Error', error=?, publish_at=? WHERE path=? AND page_id=?",
+                                (f"{reason} | Retry slot reserved for {retry_at.strftime('%Y-%m-%d %H:%M')}. "
+                                 "Reset failed and start the queue to retry.", retry_at.isoformat(), path, page_id)
+                            )
+                            self.log(
+                                f"Facebook rejected {name} on {page.get('name')}: {exc}. "
+                                f"Its retry slot is reserved for {retry_at.strftime('%Y-%m-%d %H:%M')} "
+                                "local time tomorrow; use Reset failed and start the queue to retry it."
+                            )
 
                     self.update_fb_aggregate(path, selected_pages)
 

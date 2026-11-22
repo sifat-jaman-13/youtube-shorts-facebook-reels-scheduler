@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.14] - 2026-11-22
+
+### Added
+
+- Added a dedicated **How to use** page in the native app, covering MP4/TXT pairing, filename conventions, TXT title/description format, automatic scanning, queue review and scheduling.
+- Added a separate **Confirm start time** action. It saves and confirms the chosen first-post date and interval; editing either value clears the confirmation.
+- Set the supported posting interval to a minimum of 5 minutes and a maximum of 24 hours.
+
+### Fixed
+
+- Scanning no longer silently overwrites the user's selected start time with a suggested time.
+- Scheduling no longer silently moves a large queue several hours later; the chosen start time is used, with a visible 15-minute minimum lead time.
+- YouTube quota overflow is deferred to the next quota window, preserving the selected local clock time and interval.
+- Rejected YouTube and Facebook destinations retain a retry slot for tomorrow; accepted destinations are left untouched.
+- Tightened worker-side interval validation to reject values outside 5 minutes?24 hours.
+
 ## [2.0.13] - 2026-11-22
 
 ### Fixed

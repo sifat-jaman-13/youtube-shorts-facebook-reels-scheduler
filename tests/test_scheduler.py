@@ -52,6 +52,12 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn('x:Name="StartHour"', xaml)
         self.assertIn('x:Name="StartMinute"', xaml)
         self.assertIn('x:Name="StartAmPm"', xaml)
+        self.assertIn('x:Name="ConfirmStartButton"', xaml)
+        self.assertIn('Click="ConfirmStartTime_Click"', xaml)
+        self.assertIn('x:Name="NavHowTo"', xaml)
+        self.assertIn('x:Name="HowToPage"', xaml)
+        self.assertIn("exactly the same basename", xaml)
+        self.assertIn("interval must be between 5 minutes and 24 hours", code.lower())
         self.assertIn('PreviewTextInput="StartMinute_PreviewTextInput"', xaml)
         self.assertIn("StartMinute_PreviewTextInput", code)
         self.assertNotIn('x:Name="StartTime"', xaml)
@@ -61,7 +67,21 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn("StartDate.DisplayDateStart = DateTime.Today", code)
         self.assertIn("GetSelectedStartDateTime()", code)
         self.assertIn("SetDefaultStartTime()", code)
+        self.assertIn("ScheduleInput_Changed", code)
+        self.assertIn("_startTimeConfirmed", code)
+        self.assertIn("Click Confirm start time", code)
         self.assertIn("validate_future_start_at(data.get(\"start_at\"))", backend)
+        core_source = (project / "app.py").read_text(encoding="utf-8")
+        self.assertIn("Your chosen start time is unchanged", core_source)
+        self.assertNotIn('self.root.after(0, lambda: self.start_var.set(recommended.strftime', core_source)
+        self.assertIn("unaccepted YouTube ", core_source)
+        self.assertIn("next available quota windows", core_source)
+        self.assertIn("Retry slot reserved for", core_source)
+        self.assertIn("allocation_rows.append(allocation_row)", core_source)
+        self.assertIn("sequence = 0", core_source)
+        self.assertIn("slot = start + timedelta(minutes=sequence * interval)", core_source)
+        self.assertIn("status NOT IN ('Scheduled','Published')", core_source)
+        self.assertIn("if last_dt < publish_at", core_source)
         self.assertIn("EnableRowVirtualization", xaml)
         self.assertIn("VirtualizingPanel.VirtualizationMode", xaml)
         self.assertIn("Clips.Insert", code)
@@ -205,9 +225,14 @@ class SchedulerRegressionTests(unittest.TestCase):
                 self.assertEqual(successful.secrets["yt_channel_id"], "new-id")
                 self.assertFalse(token.with_name(token.name + ".reconnect-backup").exists())
 
-    def test_post_interval_supports_hours_and_minutes_up_to_one_day(self):
+    def test_post_interval_supports_five_minutes_through_one_day(self):
+        self.assertEqual(app.validate_interval_minutes(5), 5)
+        self.assertEqual(app.validate_interval_minutes(1440), 1440)
+        with self.assertRaisesRegex(ValueError, "between 5 minutes"):
+            app.validate_interval_minutes(4)
+        with self.assertRaisesRegex(ValueError, "between 5 minutes"):
+            app.validate_interval_minutes(1441)
         self.assertEqual(app.MAX_INTERVAL_MINUTES, 1440)
-        self.assertEqual(app.MAX_INTERVAL_MINUTES // 60, 24)
 
     def test_youtube_slot_allocator_accepts_hour_based_intervals(self):
         start = datetime.now().astimezone() + timedelta(hours=1)
@@ -351,6 +376,23 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertGreater(datetime.fromisoformat(slots["missing.mp4"]),
                            datetime.fromisoformat(slots["expired.mp4"]))
 
+    def test_new_youtube_slots_start_at_the_confirmed_time_even_if_accepted_posts_are_later(self):
+        start = self.now + timedelta(minutes=20)
+        rows = [
+            {"path": "already-accepted.mp4", "yt_status": "Scheduled",
+             "publish_at": (start + timedelta(hours=2)).isoformat()},
+            {"path": "new-pending.mp4", "yt_status": "Pending", "publish_at": None},
+        ]
+        slots = app.allocate_youtube_publish_slots(rows, start, 5, now=self.now)
+        self.assertEqual(
+            datetime.fromisoformat(slots["new-pending.mp4"]),
+            start
+        )
+        self.assertEqual(
+            rows[0]["publish_at"],
+            (start + timedelta(hours=2)).isoformat()
+        )
+
     def test_youtube_retry_never_reschedules_an_accepted_post(self):
         rows = [
             {"path": "accepted.mp4", "yt_status": "Scheduled", "publish_at": None},
@@ -395,7 +437,7 @@ class SchedulerRegressionTests(unittest.TestCase):
             )
         assigned = datetime.fromisoformat(slots["retry.mp4"]).astimezone(pacific)
         self.assertGreater(assigned.date(), day)
-        self.assertEqual((assigned.hour, assigned.minute), (4, 0))
+        self.assertEqual((assigned.hour, assigned.minute), (first.hour, first.minute))
 
     def test_parse_txt_uses_first_nonempty_line_as_title_and_rest_as_description(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -861,13 +903,15 @@ class FutureScheduleValidationTests(unittest.TestCase):
 
     def test_rejects_a_start_time_equal_to_now(self):
         now = datetime(2026, 11, 22, 16, 15, 0)
-        with self.assertRaisesRegex(ValueError, "later than the current local time"):
+        with self.assertRaisesRegex(ValueError, "at least 15 minutes later"):
             backend_service.validate_future_start_at("2026-11-22 16:15", now=now)
+        with self.assertRaisesRegex(ValueError, "at least 15 minutes later"):
+            backend_service.validate_future_start_at("2026-11-22 16:29", now=now)
 
     def test_accepts_a_future_start_time(self):
         now = datetime(2026, 11, 22, 16, 15, 0)
-        result = backend_service.validate_future_start_at("2026-11-22 16:16", now=now)
-        self.assertEqual(result, datetime(2026, 11, 22, 16, 16))
+        result = backend_service.validate_future_start_at("2026-11-22 16:30", now=now)
+        self.assertEqual(result, datetime(2026, 11, 22, 16, 30))
 
     def test_rejects_an_invalid_start_time(self):
         with self.assertRaisesRegex(ValueError, "Choose a valid first post date"):
@@ -876,7 +920,7 @@ class FutureScheduleValidationTests(unittest.TestCase):
     def test_queue_start_rejects_a_past_date_before_touching_settings(self):
         fake_backend = SimpleNamespace(youtube_auth_worker=None, facebook_auth_worker=None)
         past_start = (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M")
-        with self.assertRaisesRegex(ValueError, "later than the current local time"):
+        with self.assertRaisesRegex(ValueError, "at least 15 minutes later"):
             backend_service.NativeBackend.start_queue(
                 fake_backend,
                 {

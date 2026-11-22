@@ -299,11 +299,12 @@
                         <Button x:Name="NavQueue" Content="Publishing queue" Style="{StaticResource NavButton}" Click="NavQueue_Click" Background="#302153"/>
                         <Button x:Name="NavConnections" Content="Connections" Style="{StaticResource NavButton}" Click="NavConnections_Click"/>
                         <Button x:Name="NavActivity" Content="Activity log" Style="{StaticResource NavButton}" Click="NavActivity_Click"/>
+                        <Button x:Name="NavHowTo" Content="How to use" Style="{StaticResource NavButton}" Click="NavHowTo_Click"/>
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom" Margin="5,0,5,5">
                         <Separator Background="#293653" Margin="0,10"/>
                         <TextBlock Text="NATIVE WINDOWS UI" Foreground="#9AA8C4" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock Text=".NET 10 WPF | Version 2.0.11" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
+                        <TextBlock Text=".NET 10 WPF | Version 2.0.14" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
                         <TextBlock Text="API worker runs separately." Foreground="#73829F" FontSize="10" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>
@@ -341,6 +342,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -357,8 +359,10 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="First post" VerticalAlignment="Center" Margin="0,0,9,0"/>
                             <DatePicker x:Name="StartDate" Grid.Row="0" Grid.Column="1" Margin="0,0,8,0"
+                                        SelectedDateChanged="ScheduleInput_Changed"
                                         ToolTip="Choose today or a future calendar date"/>
                             <ComboBox x:Name="StartHour" Grid.Row="0" Grid.Column="2" Width="54" SelectedIndex="0"
+                                      SelectionChanged="ScheduleInput_Changed"
                                       Margin="0,0,4,0" ToolTip="Hour">
                                 <ComboBoxItem Content="1"/><ComboBoxItem Content="2"/>
                                 <ComboBoxItem Content="3"/><ComboBoxItem Content="4"/>
@@ -369,17 +373,21 @@
                             </ComboBox>
                             <TextBlock Grid.Row="0" Grid.Column="3" Text=":" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <TextBox x:Name="StartMinute" Grid.Row="0" Grid.Column="4" Width="42" Text="00"
-                                     MaxLength="2" PreviewTextInput="StartMinute_PreviewTextInput" HorizontalContentAlignment="Center" Margin="0,0,6,0"
+                                     MaxLength="2" TextChanged="ScheduleInput_Changed"
+                                     PreviewTextInput="StartMinute_PreviewTextInput" HorizontalContentAlignment="Center" Margin="0,0,6,0"
                                      ToolTip="Enter minutes from 00 to 59"/>
                             <ComboBox x:Name="StartAmPm" Grid.Row="0" Grid.Column="5" Width="62" SelectedIndex="0"
+                                      SelectionChanged="ScheduleInput_Changed"
                                       Margin="0,0,10,0" ToolTip="AM or PM">
                                 <ComboBoxItem Content="AM"/><ComboBoxItem Content="PM"/>
                             </ComboBox>
                             <TextBlock Grid.Row="0" Grid.Column="6" Text="Interval" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox x:Name="IntervalHours" Grid.Row="0" Grid.Column="7" Text="0"
+                                     TextChanged="ScheduleInput_Changed"
                                      HorizontalContentAlignment="Center" ToolTip="Hours" Margin="0,0,4,0"/>
                             <TextBlock Grid.Row="0" Grid.Column="8" Text="h" VerticalAlignment="Center" Foreground="#9AA8C4" Margin="3,0,8,0"/>
                             <TextBox x:Name="IntervalMinutes" Grid.Row="0" Grid.Column="9" Text="5"
+                                     TextChanged="ScheduleInput_Changed"
                                      HorizontalContentAlignment="Center" ToolTip="Additional minutes" Margin="0,0,4,0"/>
                             <TextBlock Grid.Row="0" Grid.Column="10" Text="min" VerticalAlignment="Center" Foreground="#9AA8C4" Margin="3,0,0,0"/>
                             <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="11" Orientation="Horizontal" Margin="0,9,0,0">
@@ -401,15 +409,22 @@
                                 <CheckBox x:Name="MadeForKidsCheck" Content="Made for kids"/>
                                 <CheckBox x:Name="RightsCheck" Content="I own these clips or have permission to repost them."/>
                             </StackPanel>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="11"
+                                       Text="Interval range: 5 minutes to 24 hours. Each next clip uses the selected interval; platform quota limits can defer remaining clips to the next eligible day."
+                                       Foreground="#9AA8C4" FontSize="10" TextWrapping="Wrap" Margin="2,7,2,0"/>
                         </Grid>
                     </GroupBox>
 
                     <WrapPanel Grid.Row="2" Margin="0,0,0,5">
+                        <Button x:Name="ConfirmStartButton" Content="Confirm start time" Style="{StaticResource PrimaryButton}" Click="ConfirmStartTime_Click"/>
                         <Button x:Name="ScheduleButton" Content="Schedule queue" Style="{StaticResource PrimaryButton}" Click="Schedule_Click"/>
                         <Button x:Name="StopButton" Content="Stop queue" Style="{StaticResource DangerButton}" Click="Stop_Click" IsEnabled="False"/>
                         <Button x:Name="VerifyButton" Content="Check publication" Click="Verify_Click"/>
                         <Button x:Name="ResetFailedButton" Content="Reset failed" Click="ResetFailed_Click"/>
                         <Button Content="Export cleanup report" Click="ExportReport_Click"/>
+                        <TextBlock x:Name="StartConfirmationText" Text="Start time not confirmed."
+                                   Foreground="#FBBF24" VerticalAlignment="Center" Margin="10,0,4,0"
+                                   TextWrapping="Wrap"/>
                     </WrapPanel>
 
                     <Border Grid.Row="3" Background="#172239" BorderBrush="#293653" BorderThickness="1"
@@ -577,6 +592,85 @@
                                 to your LAN and requires a per-launch secret token. The Meta redirect URI remains
                                 http://localhost:8765/callback.
                             </TextBlock>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- How-to guide -->
+                <ScrollViewer x:Name="HowToPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="5,4,12,14">
+                        <TextBlock Text="How to use ScarClipScheduler" FontSize="22" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <TextBlock Text="A quick guide to preparing clips, pairing TXT metadata, scanning, and scheduling."
+                                   Foreground="#9AA8C4" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <GroupBox Header="1. PREPARE YOUR CLIP FOLDER">
+                            <StackPanel>
+                                <TextBlock Text="Choose the folder that directly contains your MP4 files. The scanner checks MP4 files in this folder (not nested subfolders). You can use Browse beside Clip source to select it."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <TextBlock Text="Keep each clip and its metadata TXT file together in the same folder."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="2. USE THE EXACT SAME FILENAME FOR EACH MP4 + TXT PAIR">
+                            <StackPanel>
+                                <TextBlock Text="Every MP4 should have one TXT file with exactly the same basename. Only the extension changes:"
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <Border Background="#0B1020" BorderBrush="#344363" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,8">
+                                    <TextBlock FontFamily="Consolas" Foreground="#C4B5FD"
+                                               Text="clip_001.mp4&#x0a;clip_001.txt&#x0a;&#x0a;clip_002.mp4&#x0a;clip_002.txt&#x0a;&#x0a;highlight_final.mp4&#x0a;highlight_final.txt"/>
+                                </Border>
+                                <TextBlock Text="Correct: game_clip_07.mp4 + game_clip_07.txt. Incorrect: game_clip_07.mp4 + game_clip_07_description.txt or game_clip_07.mp4.txt."
+                                           TextWrapping="Wrap" Foreground="#FBBF24"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="3. FORMAT EACH TXT FILE">
+                            <StackPanel>
+                                <TextBlock Text="The first non-empty line becomes the video title. Everything after that line becomes the description. Blank lines are allowed."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <Border Background="#0B1020" BorderBrush="#344363" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,8">
+                                    <TextBlock FontFamily="Consolas" Foreground="#A7F3D0"
+                                               Text="My best gaming moment&#x0a;&#x0a;Watch until the end for the funniest part!&#x0a;#shorts #gaming"/>
+                                </Border>
+                                <TextBlock Text="YouTube titles are limited to 100 characters; longer titles are shortened automatically. Add your description, hashtags, and other metadata below the title."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="4. AUTOMATICALLY DETECT CLIPS AND TXT FILES">
+                            <StackPanel>
+                                <TextBlock Text="Click Scan clips. ScarClipScheduler finds the MP4 files, looks for each exact matching TXT filename, reads the title and description, and adds the clips to the queue."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <TextBlock Text="If a matching TXT is missing, the clip is still detected. The filename is used as its title and its description starts blank. The scan summary reports missing TXT files."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                                <TextBlock Text="When FFprobe is available, the app also checks the Facebook Reel format (vertical 9:16 and 4?60 seconds)."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="5. REVIEW AND EDIT THE QUEUE">
+                            <StackPanel>
+                                <TextBlock Text="Review the detected clip number, filename, title, description, duration, platform status, and scheduled time. Select a row to edit its title and description. Use Select all, Unselect all, or Ctrl/Shift-click to choose a batch."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <TextBlock Text="After changing a title or description, click Save metadata. The TXT file is not renamed or overwritten."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="6. CONFIRM THE FIRST POST TIME AND INTERVAL">
+                            <StackPanel>
+                                <TextBlock Text="Set the date, hour, minute, and AM/PM. Set the interval using the hours and minutes fields. The allowed interval is at least 5 minutes and at most 24 hours."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <TextBlock Text="Click Confirm start time. The app validates and saves the selected start time and interval. If you edit the date, time, or interval afterwards, the confirmation is cleared and you must confirm again."
+                                           TextWrapping="Wrap" Foreground="#A7F3D0" Margin="0,6,0,0"/>
+                                <TextBlock Text="The first clip uses the confirmed start time. Each following clip uses the confirmed interval. YouTube quota and Facebook's per-Page 30-Reels-per-24-hours limit can defer remaining work to a later eligible window; the app shows those deferrals in the Activity log."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="7. START, MONITOR, AND RETRY">
+                            <StackPanel>
+                                <TextBlock Text="Select YouTube Shorts and/or Facebook Page Reels, confirm your publishing rights, then click Schedule queue. Review the final summary and confirm. The app uploads the files and asks the selected platforms to publish at their assigned times."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <TextBlock Text="Already accepted posts are not uploaded again. If a platform rejects an upload, the failed destination is marked Error and its retry slot is moved to tomorrow. Use Reset failed and start the queue again to retry it; keep the app open while the queue is actively processing."
+                                           TextWrapping="Wrap" Foreground="#FBBF24" Margin="0,6,0,0"/>
+                                <TextBlock Text="Stop queue allows the active platform request to finish. It does not cancel posts already accepted by YouTube or Facebook. Those must be cancelled separately in YouTube Studio or Meta Business Suite."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                            </StackPanel>
                         </GroupBox>
                     </StackPanel>
                 </ScrollViewer>

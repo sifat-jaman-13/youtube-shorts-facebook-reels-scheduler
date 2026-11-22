@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.13 — Native Windows WPF desktop scheduler**
+**Version 2.0.14 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -74,11 +74,17 @@ Use **Quit** inside the app to close ScarClipScheduler. If a scan, upload or ver
 4. Edit the selected clip's title and description if needed, then save the metadata.
 5. Open **Connections** and connect YouTube and/or Facebook.
 6. Select the Facebook Pages that should receive Reels.
-7. Set the first post date, choose an hour from the dropdown, enter minutes from 00 to 59, and choose AM or PM. The calendar does not allow dates before today, and the app rejects any first-post time that is not in the future.
-8. Set the posting interval using hours and minutes. The accepted range is 1 minute through 24 hours.
-9. Choose YouTube Shorts, Facebook Page Reels, or both. Confirm that you have the rights to publish the videos, then choose **Schedule queue**.
+7. Set the first post date and time, then set the posting interval. The allowed interval is **5 minutes through 24 hours**.
+8. Click **Confirm start time**. The app saves the selected time and interval. Editing the date, time, or interval clears the confirmation; confirm again before scheduling.
+9. Choose YouTube Shorts, Facebook Page Reels, or both. Confirm that you have the rights to publish the videos, then choose **Schedule queue** and approve the final summary.
 
 The app uploads the videos now and asks the selected platform APIs to publish them at the requested times. A platform's accepted response is recorded as scheduled; it does not mean the video is already public. The app can verify publication later.
+
+The first unaccepted clip uses the confirmed start time; each following clip uses the selected interval. The app does not silently replace the chosen time after a scan. The first post must be at least 15 minutes ahead of the current local time.
+
+YouTube quota and Facebook's 30-Reels-per-Page-per-24-hours limit can defer remaining work. When YouTube's daily quota is reached, remaining unaccepted YouTube slots are moved to the next quota window. Other rejected destinations are marked Error and assigned a retry slot for tomorrow; use **Reset failed** and start the queue again to retry those destinations. Already accepted platform schedules are never resubmitted.
+
+The native app's **How to use** page contains a visual filename-pairing example, TXT layout, and step-by-step scanning instructions.
 
 ## Connections
 
