@@ -46,8 +46,8 @@ try
 {
     await using var backend = await BackendHost.StartAsync();
     var state = await backend.Api.GetStateAsync();
-    if (state.Version != "2.0.16")
-        throw new InvalidOperationException($"Expected worker version 2.0.16, received {state.Version}.");
+    if (state.Version != "2.0.17")
+        throw new InvalidOperationException($"Expected worker version 2.0.17, received {state.Version}.");
 
     try
     {
@@ -56,7 +56,7 @@ try
     }
     catch (InvalidOperationException ex) when (ex.Message.Contains("explicit desktop user confirmation", StringComparison.Ordinal))
     {
-        Console.WriteLine("PASS: production BackendHost starts the matching 2.0.16 worker and reads its state.");
+        Console.WriteLine("PASS: production BackendHost starts the matching 2.0.17 worker and reads its state.");
         Console.WriteLine("PASS: production worker rejects scheduling without explicit confirmation.");
     }
 }

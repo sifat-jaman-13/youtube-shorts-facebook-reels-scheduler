@@ -28,8 +28,11 @@ public sealed class NativeState
     [JsonPropertyName("facebook_connecting")] public bool FacebookConnecting { get; set; }
     [JsonPropertyName("facebook_pages")] public List<PageDto> FacebookPages { get; set; } = [];
     [JsonPropertyName("rows")] public List<ClipDto> Rows { get; set; } = [];
+    [JsonPropertyName("scheduled_rows")] public List<ClipDto> ScheduledRows { get; set; } = [];
     [JsonPropertyName("counts")] public Dictionary<string, int> Counts { get; set; } = [];
     [JsonPropertyName("total")] public int Total { get; set; }
+    [JsonPropertyName("detected_total")] public int DetectedTotal { get; set; }
+    [JsonPropertyName("scheduled_total")] public int ScheduledTotal { get; set; }
     [JsonPropertyName("busy")] public bool Busy { get; set; }
     [JsonPropertyName("queue_running")] public bool QueueRunning { get; set; }
     [JsonPropertyName("scan_running")] public bool ScanRunning { get; set; }
@@ -50,6 +53,8 @@ public sealed class ClipDto
     [JsonPropertyName("yt_status")] public string YoutubeStatus { get; set; } = "Pending";
     [JsonPropertyName("fb_status")] public string FacebookStatus { get; set; } = "Pending";
     [JsonPropertyName("publish_at")] public string PublishAt { get; set; } = "";
+    [JsonPropertyName("scheduled_times")] public string ScheduledTimes { get; set; } = "";
+    [JsonPropertyName("storage_state")] public string StorageState { get; set; } = "source";
     [JsonPropertyName("yt_video_id")] public string YoutubeVideoId { get; set; } = "";
     [JsonPropertyName("facebook_pages")] public List<PageJobDto> FacebookPageJobs { get; set; } = [];
 }
@@ -96,6 +101,7 @@ public sealed class ClipRow : ObservableObject
     private string _youtubeStatus = "Pending";
     private string _facebookStatus = "Pending";
     private string _publishAt = "";
+    private string _scheduledTimes = "";
     private double? _duration;
 
     public string File { get => _file; private set => Set(ref _file, value); }
@@ -106,6 +112,7 @@ public sealed class ClipRow : ObservableObject
     public string YoutubeStatus { get => _youtubeStatus; private set => Set(ref _youtubeStatus, value); }
     public string FacebookStatus { get => _facebookStatus; private set => Set(ref _facebookStatus, value); }
     public string PublishAtText { get => _publishAt; private set => Set(ref _publishAt, value); }
+    public string ScheduledTimes { get => _scheduledTimes; private set => Set(ref _scheduledTimes, value); }
     public double? Duration { get => _duration; private set => Set(ref _duration, value); }
     public string DurationText => Duration.HasValue ? $"{Duration.Value:0.0}s" : "—";
 
@@ -124,6 +131,7 @@ public sealed class ClipRow : ObservableObject
         Duration = row.Duration;
         OnPropertyChanged(nameof(DurationText));
         PublishAtText = FormatLocal(row.PublishAt);
+        ScheduledTimes = row.ScheduledTimes;
     }
 
     private static string FormatLocal(string value)

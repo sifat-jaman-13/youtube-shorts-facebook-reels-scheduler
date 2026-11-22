@@ -16,7 +16,9 @@ namespace ScarClipScheduler.Wpf;
 public partial class MainWindow : Window
 {
     public ObservableCollection<ClipRow> Clips { get; } = [];
+    public ObservableCollection<ClipRow> ScheduledClips { get; } = [];
     public ObservableCollection<PageDto> Pages { get; } = [];
+    private const string SafeToDeleteFolderName = "You can delete this";
 
     private BackendHost? _backend;
     private ApiClient? _api;
@@ -33,7 +35,6 @@ public partial class MainWindow : Window
     private DateTime? _confirmedStartAt;
     private int _confirmedInterval;
     private bool _shutdownInProgress;
-    private bool _showAllAccepted;
     private string? _selectedMetadataPath;
 
     public MainWindow()
@@ -42,9 +43,10 @@ public partial class MainWindow : Window
         var appIcon = Path.Combine(AppContext.BaseDirectory, "backend", "assets", "scarclipscheduler.ico");
         if (File.Exists(appIcon))
             Icon = BitmapFrame.Create(new Uri(appIcon, UriKind.Absolute));
-        Title = "ScarClipScheduler 2.0.16";
+        Title = "ScarClipScheduler 2.0.17";
         DataContext = this;
         ClipGrid.ItemsSource = Clips;
+        ScheduledGrid.ItemsSource = ScheduledClips;
         StartDate.DisplayDateStart = DateTime.Today;
         StartDate.SelectedDate = DateTime.Today;
         SetDefaultStartTime();
@@ -208,6 +210,7 @@ public partial class MainWindow : Window
 
         UpdatePages(state.FacebookPages);
         UpdateRows(state.Rows);
+        UpdateScheduledRows(state.ScheduledRows);
         UpdateSummary(state);
         UpdateButtons(state);
     }
@@ -278,9 +281,7 @@ public partial class MainWindow : Window
         var selectedPaths = ClipGrid.SelectedItems.Cast<ClipRow>()
             .Select(row => row.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var desired = incoming
-            .Where(row => _showAllAccepted || !IsFullyAccepted(row.QueueStatus))
-            .ToList();
+        var desired = incoming.ToList();
         var wantedPaths = desired.Select(row => row.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -323,24 +324,58 @@ public partial class MainWindow : Window
         UpdateSelectionSummary();
     }
 
-    private static bool IsFullyAccepted(string status) =>
-        string.Equals(status, "Scheduled", StringComparison.Ordinal) ||
-        string.Equals(status, "Published", StringComparison.Ordinal);
+    private void UpdateScheduledRows(IReadOnlyList<ClipDto> incoming)
+    {
+        var selectedPaths = ScheduledGrid.SelectedItems.Cast<ClipRow>()
+            .Select(row => row.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var desired = incoming.ToList();
+        var wantedPaths = desired.Select(row => row.Path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        for (var index = 0; index < desired.Count; index++)
+        {
+            var dto = desired[index];
+            var row = ScheduledClips.FirstOrDefault(item =>
+                string.Equals(item.Path, dto.Path, StringComparison.OrdinalIgnoreCase));
+            if (row is null)
+            {
+                row = new ClipRow();
+                row.Update(dto, index + 1);
+                ScheduledClips.Insert(Math.Min(index, ScheduledClips.Count), row);
+            }
+            else
+            {
+                row.Update(dto, index + 1);
+                var currentIndex = ScheduledClips.IndexOf(row);
+                if (currentIndex >= 0 && currentIndex != index)
+                    ScheduledClips.Move(currentIndex, Math.Min(index, ScheduledClips.Count - 1));
+            }
+        }
+
+        foreach (var row in ScheduledClips.ToList())
+        {
+            if (!wantedPaths.Contains(row.Path))
+                ScheduledClips.Remove(row);
+        }
+        foreach (var row in ScheduledClips.Where(row => selectedPaths.Contains(row.Path)).ToList())
+        {
+            if (!ScheduledGrid.SelectedItems.Contains(row))
+                ScheduledGrid.SelectedItems.Add(row);
+        }
+    }
 
     private void UpdateSummary(NativeState state)
     {
         int Count(string key) => state.Counts.TryGetValue(key, out var value) ? value : 0;
-        var accepted = Count("Scheduled") + Count("Published");
         var pending = Count("Pending") + Count("Choose platform");
         var uploading = Count("Uploading");
         var failed = Count("Failed") + Count("Skipped");
         var partial = Count("Partial");
         var uploaded = Count("Uploaded");
-        var visible = _showAllAccepted ? state.Total : Math.Max(0, state.Total - accepted);
         QueueSummary.Text =
-            $"{state.Total} clips  |  {visible} visible  |  {pending} pending  |  " +
+            $"{state.DetectedTotal} detected  |  {pending} pending  |  " +
             $"{uploading} uploading  |  {partial} partial  |  {uploaded} uploaded  |  " +
-            $"{accepted} scheduled/published  |  {failed} failed";
+            $"{state.ScheduledTotal} scheduled in the Scheduled tab  |  {failed} failed";
         FooterStatus.Text = state.Busy
             ? $"Background task active - queue: {(state.QueueRunning ? "running" : "idle")}, " +
               $"scan: {(state.ScanRunning ? "running" : "idle")}, verify: {(state.VerificationRunning ? "running" : "idle")}."
@@ -351,9 +386,11 @@ public partial class MainWindow : Window
     {
         var serviceReady = _api is not null;
         var busy = state.Busy;
-        foreach (var button in new[] { NavQueue, NavConnections, NavActivity, NavHowTo })
+        foreach (var button in new[] { NavQueue, NavScheduled, NavConnections, NavActivity, NavHowTo })
             button.IsEnabled = serviceReady;
         ConfirmStartButton.IsEnabled = serviceReady && !busy;
+        SafeToDeleteButton.IsEnabled = serviceReady && !string.IsNullOrWhiteSpace(state.Folder);
+        ClearHistoryButton.IsEnabled = serviceReady && !busy && state.ScheduledTotal > 0;
 
         ScanButton.IsEnabled = serviceReady && !busy;
         ScheduleButton.IsEnabled = serviceReady && !busy;
@@ -491,6 +528,7 @@ public partial class MainWindow : Window
     }
 
     private void NavQueue_Click(object sender, RoutedEventArgs e) => ShowPage("queue");
+    private void NavScheduled_Click(object sender, RoutedEventArgs e) => ShowPage("scheduled");
     private void NavConnections_Click(object sender, RoutedEventArgs e) => ShowPage("connections");
     private void NavActivity_Click(object sender, RoutedEventArgs e) => ShowPage("activity");
     private void NavHowTo_Click(object sender, RoutedEventArgs e) => ShowPage("howto");
@@ -498,22 +536,15 @@ public partial class MainWindow : Window
     private void ShowPage(string page)
     {
         QueuePage.Visibility = page == "queue" ? Visibility.Visible : Visibility.Collapsed;
+        ScheduledPage.Visibility = page == "scheduled" ? Visibility.Visible : Visibility.Collapsed;
         ConnectionsPage.Visibility = page == "connections" ? Visibility.Visible : Visibility.Collapsed;
         ActivityPage.Visibility = page == "activity" ? Visibility.Visible : Visibility.Collapsed;
         HowToPage.Visibility = page == "howto" ? Visibility.Visible : Visibility.Collapsed;
         NavQueue.Background = page == "queue" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
+        NavScheduled.Background = page == "scheduled" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
         NavConnections.Background = page == "connections" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
         NavActivity.Background = page == "activity" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
         NavHowTo.Background = page == "howto" ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 33, 83)) : System.Windows.Media.Brushes.Transparent;
-    }
-
-    private void HideAccepted_Changed(object sender, RoutedEventArgs e)
-    {
-        if (HideAcceptedCheck is null || _state is null)
-            return;
-        _showAllAccepted = HideAcceptedCheck.IsChecked != true;
-        UpdateRows(_state.Rows);
-        UpdateSummary(_state);
     }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e) => ClipGrid.SelectAll();
@@ -641,6 +672,71 @@ public partial class MainWindow : Window
             await RefreshStateAsync();
         }
         catch (Exception ex) { ShowError("Scheduling could not start", ex.Message); }
+    }
+
+    private void SafeToDelete_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var source = _state?.Folder;
+            if (string.IsNullOrWhiteSpace(source))
+                throw new InvalidOperationException("Choose the clip source folder first.");
+            var folder = Path.Combine(source, SafeToDeleteFolderName);
+            Directory.CreateDirectory(folder);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"")
+            {
+                UseShellExecute = true
+            });
+            FooterStatus.Text = $"Opened {SafeToDeleteFolderName}. These are local copies already accepted by all selected upload destinations.";
+        }
+        catch (Exception ex)
+        {
+            ShowError("Could not open the Safe to delete folder", ex.Message);
+        }
+    }
+
+    private async void ClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state?.Busy == true)
+        {
+            ShowWarning("Queue is busy", "Wait until scanning, publishing and verification have finished before clearing Scheduled history.");
+            return;
+        }
+
+        var count = ScheduledClips.Count;
+        if (count == 0)
+        {
+            ShowWarning("No Scheduled history", "There are no Scheduled records to clear.");
+            return;
+        }
+
+        var prompt =
+            $"Clear {count} Scheduled record(s) from the app?\n\n" +
+            "This will:\n" +
+            "• Remove these rows from the Scheduled screen.\n" +
+            "• Keep every YouTube/Facebook upload receipt and duplicate-prevention fingerprint.\n" +
+            "• Leave all MP4/TXT files in the You can delete this folder.\n" +
+            "• NOT cancel posts already accepted by YouTube or Meta.\n\n" +
+            "A verified SQLite backup is created first. This action cannot be undone from the app.";
+        if (MessageBox.Show(this, prompt, "Clear Scheduled history", MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            using var result = await RequireApi().PostAsync("api/clear-history", new { });
+            var cleared = result.RootElement.TryGetProperty("cleared", out var clearedValue)
+                ? clearedValue.GetInt32() : 0;
+            var preserved = result.RootElement.TryGetProperty("upload_receipts_preserved", out var receiptValue)
+                ? receiptValue.GetInt32() : 0;
+            await RefreshStateAsync();
+            FooterStatus.Text = $"Cleared {cleared} Scheduled history row(s); retained {preserved} permanent upload receipt(s).";
+            AddActivity(FooterStatus.Text);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Scheduled history was not cleared", ex.Message);
+        }
     }
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
@@ -911,7 +1007,7 @@ public partial class MainWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.16  |  Native Windows application",
+            Text = "Version 2.0.17  |  Native Windows application",
             FontSize = 12,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(154, 168, 196)),
             Margin = new Thickness(0, 0, 0, 14)

@@ -56,6 +56,21 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn('Click="ConfirmStartTime_Click"', xaml)
         self.assertIn('x:Name="NavHowTo"', xaml)
         self.assertIn('x:Name="HowToPage"', xaml)
+        self.assertIn('x:Name="NavScheduled"', xaml)
+        self.assertIn('x:Name="ScheduledPage"', xaml)
+        self.assertIn('x:Name="ScheduledGrid"', xaml)
+        self.assertIn('x:Name="SafeToDeleteButton"', xaml)
+        self.assertIn('x:Name="ClearHistoryButton"', xaml)
+        self.assertIn('Click="ClearHistory_Click"', xaml)
+        self.assertIn("accepts the complete upload", xaml)
+        self.assertIn("You can delete this", xaml)
+        self.assertIn("Clear history removes the visible Scheduled rows", xaml)
+        self.assertIn("api/clear-history", backend)
+        readme = (project / "README.md").read_text(encoding="utf-8")
+        self.assertIn("Separate Scheduled screen", readme)
+        self.assertIn("SAFE TO DELETE", readme)
+        self.assertIn("Clear history", readme)
+        self.assertIn("upload_ledger", readme)
         self.assertIn("exactly the same basename", xaml)
         self.assertIn("interval must be between 5 minutes and 24 hours", code.lower())
         self.assertIn('PreviewTextInput="StartMinute_PreviewTextInput"', xaml)
@@ -499,7 +514,7 @@ class SchedulerRegressionTests(unittest.TestCase):
             "Failed"
         )
 
-    def test_safe_cleanup_gate_requires_every_recorded_destination_published(self):
+    def test_safe_to_delete_requires_every_destination_api_accepted_not_public(self):
         with tempfile.TemporaryDirectory() as directory:
             instance = app.SchedulerApp.__new__(app.SchedulerApp)
             instance.db_lock = threading.Lock()
@@ -509,26 +524,307 @@ class SchedulerRegressionTests(unittest.TestCase):
             path_a = str(Path(directory) / "a.mp4")
             path_b = str(Path(directory) / "b.mp4")
             instance.db_execute(
-                "INSERT INTO clips(path,title,description,yt_status,yt_video_id,publish_at) "
-                "VALUES(?,?,?,?,?,?)",
-                (path_a, "A", "", "Published", "yt-a", self.now.isoformat())
+                "INSERT INTO clips(path,title,description,yt_status,yt_video_id) VALUES(?,?,?,?,?)",
+                (path_a, "A", "", "Scheduled", "yt-a")
             )
             instance.db_execute(
-                "INSERT INTO clips(path,title,description,yt_status,yt_video_id,publish_at) "
-                "VALUES(?,?,?,?,?,?)",
-                (path_b, "B", "", "Published", "yt-b", self.now.isoformat())
+                "INSERT INTO clips(path,title,description,yt_status,yt_video_id) VALUES(?,?,?,?,?)",
+                (path_b, "B", "", "Scheduled", "yt-b")
             )
             instance.db_execute(
                 "INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id) "
                 "VALUES(?,?,?,?,?,?)",
-                (path_b, "page-a", "Page A", self.now.isoformat(), "Scheduled", "fb-b")
+                (path_b, "page-a", "Page A", self.now.isoformat(), "Pending", None)
             )
-            self.assertFalse(instance.all_recorded_destinations_published())
+            self.assertFalse(instance.all_recorded_destinations_accepted())
             instance.db_execute(
-                "UPDATE facebook_page_jobs SET status='Published' WHERE path=?",
+                "UPDATE facebook_page_jobs SET status='Scheduled', video_id='fb-b' WHERE path=?",
                 (path_b,)
             )
-            self.assertTrue(instance.all_recorded_destinations_published())
+            # The post is still only Scheduled, not public, but all API uploads are accepted.
+            self.assertTrue(instance.all_recorded_destinations_accepted())
+            instance.conn.close()
+
+    def test_clear_scheduled_history_keeps_files_and_permanent_upload_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "accepted.mp4"
+            txt = root / "accepted.txt"
+            video.write_bytes(b"accepted video bytes")
+            txt.write_text("Accepted title\\nAccepted description", encoding="utf-8")
+            database_path = root / "queue.db"
+
+            instance = backend_service.NativeBackend.__new__(backend_service.NativeBackend)
+            instance.db_lock = threading.RLock()
+            instance.conn = sqlite3.connect(database_path)
+            instance.conn.row_factory = sqlite3.Row
+            app.SchedulerApp.create_db(instance)
+            instance.worker = None
+            instance.scan_worker = None
+            instance.verification_worker = None
+            instance.youtube_auth_worker = None
+            instance.facebook_auth_worker = None
+            instance.log = lambda _message: None
+            instance.emit = lambda *_args, **_kwargs: None
+
+            scheduled_at = self.now.isoformat()
+            instance.conn.execute(
+                """INSERT INTO clips(path,title,description,yt_status,yt_video_id,
+                   storage_state,safe_to_delete) VALUES(?,?,?,?,?,?,?)""",
+                (str(video), "Accepted title", "Accepted description",
+                 "Scheduled", "youtube-video-1", "scheduled", 1)
+            )
+            instance.conn.execute(
+                """INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id)
+                   VALUES(?,?,?,?,?,?)""",
+                (str(video), "page-1", "Page 1", scheduled_at, "Scheduled", "facebook-reel-1")
+            )
+            for platform, destination, external_id in (
+                ("youtube", "youtube-channel", "youtube-video-1"),
+                ("facebook", "page-1", "facebook-reel-1"),
+            ):
+                instance.conn.execute(
+                    """INSERT INTO upload_ledger(
+                        video_name,scheduled_at,platform,destination_id,source_path,
+                        content_sha256,status,external_id,created_at,updated_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (video.name, scheduled_at, platform, destination, str(video),
+                     "a" * 64, "Scheduled", external_id, scheduled_at, scheduled_at)
+                )
+            instance.conn.commit()
+
+            result = instance.clear_scheduled_history()
+
+            self.assertEqual(result["cleared"], 1)
+            self.assertEqual(result["upload_receipts_preserved"], 2)
+            self.assertEqual(result["files_deleted"], 0)
+            self.assertTrue(video.is_file())
+            self.assertTrue(txt.is_file())
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM clips").fetchone()[0], 0
+            )
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM facebook_page_jobs").fetchone()[0], 0
+            )
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM upload_ledger").fetchone()[0], 2
+            )
+            backups = list((root / "backups").glob("queue-before-clear-history-*.sqlite3"))
+            self.assertEqual(len(backups), 1)
+            backup = sqlite3.connect(backups[0])
+            try:
+                self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                self.assertEqual(backup.execute("SELECT COUNT(*) FROM clips").fetchone()[0], 1)
+                self.assertEqual(backup.execute("SELECT COUNT(*) FROM upload_ledger").fetchone()[0], 2)
+            finally:
+                backup.close()
+            instance.conn.close()
+
+    def test_legacy_safe_folder_is_renamed_and_database_paths_are_migrated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "You can delete these clips now"
+            legacy.mkdir()
+            video = legacy / "legacy-accepted.mp4"
+            txt = legacy / "legacy-accepted.txt"
+            video.write_bytes(b"legacy accepted video")
+            txt.write_text("Legacy title\\nLegacy description", encoding="utf-8")
+
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.RLock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.folder_var = SimpleNamespace(get=lambda: str(root))
+            instance.selected_path = None
+            instance.txt_preview_cache = {}
+            instance.log = lambda _message: None
+            instance.db_execute(
+                """INSERT INTO clips(path,title,description,yt_status,yt_video_id,
+                   safe_to_delete,storage_state) VALUES(?,?,?,?,?,?,?)""",
+                (str(video), "Legacy title", "Legacy description", "Scheduled",
+                 "yt-legacy-1", 1, "scheduled")
+            )
+            instance.db_execute(
+                "INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (str(video), "page-legacy", "Legacy Page", self.now.isoformat(),
+                 "Scheduled", "fb-legacy-1")
+            )
+            instance.db_execute(
+                """INSERT INTO upload_ledger(
+                    video_name,scheduled_at,platform,destination_id,source_path,
+                    content_sha256,status,external_id,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (video.name, self.now.isoformat(), "youtube", "yt-channel",
+                 str(video), "c" * 64, "Scheduled", "yt-legacy-1",
+                 self.now.isoformat(), self.now.isoformat())
+            )
+
+            instance.ensure_output_folders()
+
+            safe = root / app.SAFE_TO_DELETE_FOLDER
+            migrated_video = safe / video.name
+            self.assertTrue(migrated_video.is_file())
+            self.assertTrue(migrated_video.with_suffix(".txt").is_file())
+            self.assertFalse(legacy.exists())
+            row = instance.get_clips()[0]
+            self.assertEqual(row["path"], str(migrated_video))
+            self.assertEqual(row["storage_state"], "scheduled")
+            self.assertEqual(instance.get_fb_job(str(migrated_video), "page-legacy")["video_id"], "fb-legacy-1")
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM upload_ledger").fetchone()[0], 1
+            )
+            instance.conn.close()
+
+    def test_original_planned_destinations_stay_required_after_settings_toggles_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "scope-check.mp4"
+            txt = root / "scope-check.txt"
+            video.write_bytes(b"planned destination scope")
+            txt.write_text("Title\\nDescription", encoding="utf-8")
+            scheduled_at = self.now.isoformat()
+
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.RLock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.folder_var = SimpleNamespace(get=lambda: str(root))
+            instance.selected_path = str(video)
+            instance.txt_preview_cache = {}
+            instance.log = lambda _message: None
+            instance.secrets = {
+                "yt_channel_title": "Test YouTube",
+                "yt_channel_id": "youtube-channel",
+                "fb_pages": [
+                    {"id": "page-a", "name": "Page A"},
+                    {"id": "page-b", "name": "Page B"},
+                ],
+            }
+            instance.upload_destination_id = lambda _platform: "youtube-channel"
+            instance.db_execute(
+                "INSERT INTO clips(path,title,description,yt_status,publish_at) VALUES(?,?,?,?,?)",
+                (str(video), "Title", "Description", "Pending", scheduled_at)
+            )
+            for page_id, name, status, external_id in (
+                ("page-a", "Page A", "Scheduled", "reel-a"),
+                ("page-b", "Page B", "Pending", None),
+            ):
+                instance.db_execute(
+                    """INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id)
+                       VALUES(?,?,?,?,?,?)""",
+                    (str(video), page_id, name, scheduled_at, status, external_id)
+                )
+            for platform, destination, status, external_id in (
+                ("youtube", "youtube-channel", "Pending", None),
+                ("facebook", "page-a", "Scheduled", "reel-a"),
+                ("facebook", "page-b", "Pending", None),
+            ):
+                instance.db_execute(
+                    """INSERT INTO upload_ledger(
+                        video_name,scheduled_at,platform,destination_id,source_path,
+                        content_sha256,status,external_id,created_at,updated_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (video.name, scheduled_at, platform, destination, str(video),
+                     "d" * 64, status, external_id, scheduled_at, scheduled_at)
+                )
+
+            # Current UI selections have both platforms switched off. The original
+            # persisted ledger/Page-job scope must still require all three targets.
+            row, entries = instance._selected_destination_statuses(str(video), False, False, [])
+            self.assertEqual(
+                {(item["platform"], item["destination_id"]) for item in entries},
+                {("youtube", "youtube-channel"), ("facebook", "page-a"), ("facebook", "page-b")}
+            )
+            instance.organize_clip_after_upload(str(video), False, False, [])
+            self.assertTrue(video.is_file())
+            self.assertEqual(instance.get_clips()[0]["path"], str(video))
+            self.assertEqual(instance.get_clips()[0]["storage_state"], "source")
+
+            instance.db_execute(
+                "UPDATE clips SET yt_status='Scheduled', yt_video_id='yt-video' WHERE path=?",
+                (str(video),)
+            )
+            instance.db_execute(
+                "UPDATE facebook_page_jobs SET status='Scheduled', video_id='reel-b' WHERE path=? AND page_id='page-b'",
+                (str(video),)
+            )
+            self.assertTrue(instance.organize_clip_after_upload(str(video), False, False, []))
+            safe_video = root / app.SAFE_TO_DELETE_FOLDER / video.name
+            self.assertTrue(safe_video.is_file())
+            self.assertFalse(video.exists())
+            self.assertEqual(instance.get_clips()[0]["storage_state"], "scheduled")
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM upload_ledger").fetchone()[0],
+                3
+            )
+            instance.conn.close()
+
+    def test_accepted_clip_moves_to_safe_folder_and_retains_scheduled_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "clip.mp4"
+            txt = root / "clip.txt"
+            video.write_bytes(b"accepted mp4")
+            txt.write_text("Title\\nDescription", encoding="utf-8")
+
+            instance = app.SchedulerApp.__new__(app.SchedulerApp)
+            instance.db_lock = threading.RLock()
+            instance.conn = sqlite3.connect(":memory:")
+            instance.conn.row_factory = sqlite3.Row
+            instance.create_db()
+            instance.folder_var = SimpleNamespace(get=lambda: str(root))
+            instance.selected_path = str(video)
+            instance.txt_preview_cache = {}
+            instance.log = lambda _message: None
+            instance.secrets = {
+                "yt_channel_title": "Test YouTube",
+                "fb_pages": [{"id": "page-a", "name": "Page A"}],
+            }
+            instance.upload_destination_id = lambda _platform: "youtube-channel"
+            instance.db_execute(
+                "INSERT INTO clips(path,title,description,yt_status,yt_video_id,publish_at) VALUES(?,?,?,?,?,?)",
+                (str(video), "Title", "Description", "Scheduled", "yt-video-1", self.now.isoformat())
+            )
+            instance.db_execute(
+                "INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (str(video), "page-a", "Page A", self.now.isoformat(), "Scheduled", "fb-reel-1")
+            )
+            instance.db_execute(
+                """INSERT INTO upload_ledger(
+                    video_name,scheduled_at,platform,destination_id,source_path,
+                    content_sha256,status,external_id,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (video.name, self.now.isoformat(), "youtube", "youtube-channel",
+                 str(video), "b" * 64, "Scheduled", "yt-video-1",
+                 self.now.isoformat(), self.now.isoformat())
+            )
+
+            moved = instance.organize_clip_after_upload(
+                str(video), True, True, [{"id": "page-a", "name": "Page A"}]
+            )
+            safe_video = root / app.SAFE_TO_DELETE_FOLDER / "clip.mp4"
+            safe_txt = root / app.SAFE_TO_DELETE_FOLDER / "clip.txt"
+            self.assertTrue(moved)
+            self.assertTrue(safe_video.is_file())
+            self.assertTrue(safe_txt.is_file())
+            self.assertFalse(video.exists())
+            self.assertFalse(txt.exists())
+            row = instance.get_clips()[0]
+            self.assertEqual(row["path"], str(safe_video))
+            self.assertEqual(row["storage_state"], "scheduled")
+            self.assertEqual(row["safe_to_delete"], 1)
+            self.assertEqual(instance.get_fb_job(str(safe_video), "page-a")["video_id"], "fb-reel-1")
+            self.assertEqual(
+                instance.conn.execute("SELECT COUNT(*) FROM upload_ledger").fetchone()[0], 1
+            )
+            manifest = json.loads(
+                (safe_video.with_name("clip.mp4.scheduled.json")).read_text(encoding="utf-8")
+            )
+            self.assertIn("Page A", manifest["display_times"])
             instance.conn.close()
 
     def test_move_clip_files_moves_mp4_txt_and_database_paths_together(self):
@@ -557,15 +853,19 @@ class SchedulerRegressionTests(unittest.TestCase):
                 (str(video), "page-a", "Page A", self.now.isoformat())
             )
 
-            moved = Path(instance.move_clip_files(str(video), "schedule"))
+            moved = Path(instance.move_clip_files(str(video), app.SAFE_TO_DELETE_FOLDER))
             self.assertTrue(moved.is_file())
             self.assertEqual(moved.read_bytes(), b"test mp4")
             self.assertEqual(moved.with_suffix(".txt").read_text(encoding="utf-8"), "Title\nDescription")
             self.assertFalse(video.exists())
             self.assertFalse(txt.exists())
-            self.assertEqual(instance.get_clips()[0]["path"], str(moved))
+            moved_row = instance.get_clips()[0]
+            self.assertEqual(moved_row["path"], str(moved))
+            self.assertEqual(moved_row["storage_state"], "scheduled")
+            self.assertEqual(moved_row["safe_to_delete"], 1)
             self.assertEqual(instance.get_fb_job(str(moved), "page-a")["path"], str(moved))
             self.assertEqual(instance.selected_path, str(moved))
+            self.assertEqual(moved.parent.name, app.SAFE_TO_DELETE_FOLDER)
             instance.conn.close()
 
     def test_move_clip_files_restores_both_files_when_database_update_fails(self):
@@ -721,8 +1021,10 @@ class SchedulerRegressionTests(unittest.TestCase):
             self.assertEqual(finish_data["upload_phase"], "FINISH")
             self.assertEqual(finish_data["video_state"], "SCHEDULED")
             self.assertEqual(finish_data["scheduled_publish_time"], str(int(publish_at.timestamp())))
-            self.assertEqual(finish_data["title"], "Test title")
-            self.assertEqual(finish_data["description"], "Test title\n\nTest description")
+            expected_caption = "Test title\n\nTest description"
+            self.assertEqual(finish_data["title"], expected_caption)
+            self.assertEqual(finish_data["description"], expected_caption)
+            self.assertEqual(finish_data["title"], finish_data["description"])
             self.assertEqual(finish_data["is_ai_generated"], "true")
 
     def test_facebook_reel_caption_puts_title_before_description(self):

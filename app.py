@@ -22,7 +22,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "2.0.16"
+APP_VERSION = "2.0.17"
 MAX_INTERVAL_MINUTES = 24 * 60
 UPLOAD_PROTECTED_STATES = ("Uploading", "Partial", "Uploaded", "Scheduled", "Published", "Unknown", "Duplicate blocked")
 UPLOAD_RETRYABLE_STATES = ("Failed", "Retryable")
@@ -32,6 +32,7 @@ APP_LOGO_PATH = ASSET_DIR / "scarclipscheduler-logo.png"
 APP_ICON_PATH = ASSET_DIR / "scarclipscheduler.ico"
 GRAPH_VERSION = "v27.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
+SAFE_TO_DELETE_FOLDER = "You can delete this"
 DEFAULT_FOLDER = str(Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "StreamSnip AI" / "source" / "out")
 DEFAULT_PAGE_ID = ""
 YT_SCOPES = [
@@ -434,7 +435,10 @@ class SchedulerApp:
                     yt_error TEXT,
                     fb_error TEXT,
                     modified REAL,
-                    content_sha256 TEXT
+                    content_sha256 TEXT,
+                    safe_to_delete INTEGER NOT NULL DEFAULT 0,
+                    safe_to_delete_at TEXT,
+                    storage_state TEXT NOT NULL DEFAULT 'source'
                 )
             """)
             clip_columns = {
@@ -442,6 +446,17 @@ class SchedulerApp:
             }
             if "content_sha256" not in clip_columns:
                 self.conn.execute("ALTER TABLE clips ADD COLUMN content_sha256 TEXT")
+            if "safe_to_delete" not in clip_columns:
+                self.conn.execute("ALTER TABLE clips ADD COLUMN safe_to_delete INTEGER NOT NULL DEFAULT 0")
+            if "safe_to_delete_at" not in clip_columns:
+                self.conn.execute("ALTER TABLE clips ADD COLUMN safe_to_delete_at TEXT")
+            if "storage_state" not in clip_columns:
+                self.conn.execute("ALTER TABLE clips ADD COLUMN storage_state TEXT NOT NULL DEFAULT 'source'")
+            # Migrate rows already moved to the manual folder by v2.0.16.
+            self.conn.execute("""
+                UPDATE clips SET storage_state='scheduled'
+                WHERE safe_to_delete=1 AND storage_state='source'
+            """)
 
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS facebook_page_jobs (
@@ -1774,27 +1789,90 @@ class SchedulerApp:
         return str(csv_path), str(txt_path)
 
     def ensure_output_folders(self):
-        """Create upload, schedule, and API-publication-confirmed cleanup folders."""
+        """Create the upload and user-controlled safe-to-delete folders."""
         source_folder = Path(self.folder_var.get().strip())
         if not source_folder.is_dir():
             raise RuntimeError(f"Clip source folder does not exist: {source_folder}")
-        for folder_name in ("uploaded", "schedule", "You can delete these clips now"):
+        legacy_safe_folder = source_folder / "You can delete these clips now"
+        current_safe_folder = source_folder / SAFE_TO_DELETE_FOLDER
+        if legacy_safe_folder.is_dir() and not current_safe_folder.exists():
+            legacy_safe_folder.rename(current_safe_folder)
+        current_safe_folder.mkdir(parents=True, exist_ok=True)
+        # Bring older accepted clips forward without losing their upload ledger.
+        with self.db_lock:
+            legacy_rows = self.conn.execute(
+                "SELECT path FROM clips WHERE storage_state='scheduled' OR safe_to_delete=1"
+            ).fetchall()
+            for legacy_row in legacy_rows:
+                old_path = Path(legacy_row["path"])
+                try:
+                    is_legacy = old_path.parent.resolve() == legacy_safe_folder.resolve()
+                except OSError:
+                    is_legacy = False
+                if not is_legacy:
+                    continue
+
+                if old_path.is_file():
+                    new_path = current_safe_folder / old_path.name
+                    if new_path.exists():
+                        # If both legacy and current copies exist, retain both
+                        # rather than overwrite; give the migrated copy a unique name.
+                        suffix = 1
+                        while new_path.exists():
+                            new_path = current_safe_folder / f"{old_path.stem}_legacy{suffix}{old_path.suffix}"
+                            suffix += 1
+                    shutil.move(str(old_path), str(new_path))
+                    old_txt = old_path.with_suffix(".txt")
+                    if old_txt.is_file():
+                        new_txt = new_path.with_suffix(".txt")
+                        if new_txt.exists():
+                            new_txt = new_path.with_name(new_path.stem + "_legacy.txt")
+                        shutil.move(str(old_txt), str(new_txt))
+                else:
+                    new_path = current_safe_folder / old_path.name
+
+                if new_path.is_file():
+                    self.conn.execute(
+                        "UPDATE facebook_page_jobs SET path=? WHERE path=?",
+                        (str(new_path), str(old_path))
+                    )
+                    self.conn.execute(
+                        "UPDATE clips SET path=?, storage_state='scheduled', safe_to_delete=1 WHERE path=?",
+                        (str(new_path), str(old_path))
+                    )
+            self.conn.commit()
+        for folder_name in ("uploaded", SAFE_TO_DELETE_FOLDER):
             (source_folder / folder_name).mkdir(parents=True, exist_ok=True)
-        safe_note = source_folder / "You can delete these clips now" / "READ ME FIRST.txt"
+        safe_note = source_folder / SAFE_TO_DELETE_FOLDER / "READ ME FIRST.txt"
         if not safe_note.exists():
             safe_note.write_text(
-                "The completed scheduled queue is moved here only after publication is verified across every recorded YouTube and Facebook Page destination.\\n"
-                "This is a manual review folder. The app does NOT delete files automatically.\\n"
-                "Check the public posts and keep any files you still need before manually deleting them.\\n",
+                "Files are moved here only after every destination selected for this clip accepts the complete upload through its API.\n"
+                "Scheduled means YouTube/Facebook has received the video and accepted its future publish time. The post does not need to be public yet.\n"
+                "These files have left the active Detected list. Their scheduled times and platform IDs remain in ScarClipScheduler.\n"
+                "This is a manual folder. The app never permanently deletes files. You may delete the local MP4/TXT when you no longer need them.\n",
                 encoding="utf-8"
             )
 
+        # Re-check older queue rows on startup/scan. Any old Scheduled clip
+        # (including one previously stored under a schedule/ subfolder) is moved
+        # here only when every originally selected destination has an accepted
+        # status and a real external video/Reel ID.
+        with self.db_lock:
+            existing_source_rows = self.conn.execute(
+                "SELECT path FROM clips WHERE storage_state='source'"
+            ).fetchall()
+        for item in existing_source_rows:
+            try:
+                self.organize_clip_after_upload(str(item["path"]))
+            except Exception as exc:
+                self.log(f"Could not migrate accepted clip {Path(item['path']).name}: {exc}")
+
     def move_clip_files(self, old_path, folder_name):
-        """Move an MP4 and its matching TXT together, then update every local DB path."""
+        """Move an MP4/TXT pair, preserve its ledger receipts, and update queue paths atomically."""
         source_video = Path(old_path)
         source_txt = source_video.with_suffix(".txt")
         source_folder = Path(self.folder_var.get().strip())
-        target_folder = source_folder if folder_name == "__source__" else source_folder / folder_name
+        target_folder = source_folder if folder_name == "__source__" else source_folder / Path(folder_name)
 
         if not source_video.is_file():
             self.log(f"File sorting skipped; MP4 not found: {source_video}")
@@ -1804,7 +1882,6 @@ class SchedulerApp:
         if source_video.parent.resolve() == target_folder.resolve():
             return str(source_video)
 
-        # Avoid overwriting an existing video, TXT, or queue record.
         candidate = target_folder / source_video.name
         suffix = 1
         while True:
@@ -1824,6 +1901,19 @@ class SchedulerApp:
         target_txt = candidate.with_suffix(".txt")
         moved_video = False
         moved_txt = False
+        folder_parts = [part.lower() for part in Path(folder_name).parts] if folder_name != "__source__" else []
+        if folder_name == "__source__":
+            storage_state, safe_flag, safe_at = "source", 0, None
+        elif SAFE_TO_DELETE_FOLDER.lower() in folder_parts:
+            # The file is safe to remove locally once every destination accepted
+            # it, while its row remains visible in the Scheduled tab as history.
+            storage_state, safe_flag = "scheduled", 1
+            safe_at = datetime.now().astimezone().isoformat(timespec="seconds")
+        elif "scheduled" in folder_parts:
+            storage_state, safe_flag, safe_at = "scheduled", 0, None
+        else:
+            storage_state, safe_flag, safe_at = "source", 0, None
+
         try:
             shutil.move(str(source_video), str(candidate))
             moved_video = True
@@ -1837,9 +1927,15 @@ class SchedulerApp:
                     "UPDATE facebook_page_jobs SET path=? WHERE path=?",
                     (str(candidate), str(source_video))
                 )
-                cur = self.conn.execute(
-                    "UPDATE clips SET path=? WHERE path=?",
+                self.conn.execute(
+                    "UPDATE upload_ledger SET source_path=? WHERE source_path=?",
                     (str(candidate), str(source_video))
+                )
+                cur = self.conn.execute(
+                    """UPDATE clips
+                       SET path=?, storage_state=?, safe_to_delete=?, safe_to_delete_at=?
+                       WHERE path=?""",
+                    (str(candidate), storage_state, safe_flag, safe_at, str(source_video))
                 )
                 if cur.rowcount != 1:
                     raise RuntimeError("The clip's queue record could not be updated.")
@@ -1847,7 +1943,6 @@ class SchedulerApp:
         except Exception:
             with self.db_lock:
                 self.conn.rollback()
-            # Restore the original files if the database update failed.
             try:
                 if moved_txt and target_txt.exists() and not source_txt.exists():
                     shutil.move(str(target_txt), str(source_txt))
@@ -1865,106 +1960,228 @@ class SchedulerApp:
         self.log(f"Automatically sorted: {moved}" + (" (matching TXT moved too)." if moved_txt else "."))
         return str(candidate)
 
-    def organize_clip_after_upload(self, path, yt_enabled=None, fb_enabled=None, selected_pages=None):
-        """Move only by verified state; the delete-safe folder requires publication everywhere."""
+    def _selected_destination_statuses(self, path, yt_enabled=None, fb_enabled=None, selected_pages=None):
+        """Return status/ID entries for exactly the platforms and Pages selected for this run."""
+        yt_enabled = bool(self.youtube_var.get()) if yt_enabled is None else bool(yt_enabled)
+        fb_enabled = bool(self.facebook_var.get()) if fb_enabled is None else bool(fb_enabled)
+        if fb_enabled and selected_pages is None:
+            selected_pages = self.get_selected_fb_pages()
+        selected_pages = list(selected_pages or [])
+
         with self.db_lock:
             row = self.conn.execute(
-                "SELECT yt_status, yt_video_id FROM clips WHERE path=?", (str(path),)
+                "SELECT * FROM clips WHERE path=?", (str(path),)
             ).fetchone()
-            jobs = self.conn.execute(
-                "SELECT status FROM facebook_page_jobs WHERE path=?", (str(path),)
+            all_jobs = self.conn.execute(
+                "SELECT * FROM facebook_page_jobs WHERE path=?", (str(path),)
             ).fetchall()
         if not row:
+            return None, []
+
+        with self.db_lock:
+            planned_receipts = self.conn.execute(
+                """SELECT DISTINCT platform, destination_id
+                   FROM upload_ledger WHERE source_path=?""",
+                (str(path),)
+            ).fetchall()
+
+        entries = []
+        youtube_id = self.upload_destination_id("youtube")
+        youtube_was_targeted = any(
+            str(item["platform"]).lower() == "youtube"
+            and str(item["destination_id"]) in {youtube_id, "*"}
+            for item in planned_receipts
+        )
+        yt_status = str(row["yt_status"] or "Pending")
+        if yt_enabled or youtube_was_targeted or row["yt_video_id"]:
+            entries.append({
+                "platform": "youtube",
+                "destination_id": youtube_id,
+                "destination": self.secrets.get("yt_channel_title") or youtube_id,
+                "status": yt_status,
+                "external_id": row["yt_video_id"],
+                "scheduled_at": str(row["publish_at"] or ""),
+            })
+
+        jobs_by_page = {str(job["page_id"]): dict(job) for job in all_jobs}
+        # Persisted Page jobs and upload-ledger rows preserve the original
+        # destination scope. Changing today's checkboxes must not silently
+        # remove a pending original destination from the safety check.
+        planned_page_ids = {
+            str(item["destination_id"])
+            for item in planned_receipts
+            if str(item["platform"]).lower() == "facebook"
+        }
+        page_ids = set(jobs_by_page) | planned_page_ids
+        if not page_ids and fb_enabled:
+            page_ids = {str(page.get("id") or "") for page in selected_pages}
+        page_names = {
+            str(page.get("id")): page.get("name") or str(page.get("id"))
+            for page in (self.secrets.get("fb_pages") or [])
+        }
+        for page_id in sorted(page_ids):
+            job = jobs_by_page.get(page_id)
+            selected_page = next((p for p in selected_pages if str(p.get("id")) == page_id), {})
+            entries.append({
+                "platform": "facebook",
+                "destination_id": page_id,
+                "destination": (
+                    (job.get("page_name") if job else None)
+                    or page_names.get(page_id)
+                    or selected_page.get("name")
+                    or page_id
+                ),
+                "status": str(job.get("status") if job else "Pending"),
+                "external_id": job.get("video_id") if job else None,
+                "scheduled_at": str(job.get("publish_at") if job else ""),
+            })
+        return dict(row), entries
+
+    def _format_scheduled_times(self, entries):
+        """Readable schedule list for the UI and per-video manifest."""
+        values = []
+        for item in entries:
+            status = str(item.get("status") or "").lower()
+            if status not in {"scheduled", "published"}:
+                continue
+            raw = str(item.get("scheduled_at") or "")
+            try:
+                pretty = datetime.fromisoformat(raw).astimezone().strftime("%Y-%m-%d %I:%M %p")
+            except Exception:
+                pretty = raw or "Time unavailable"
+            values.append(f"{item.get('destination') or item.get('destination_id')}: {pretty}")
+        return " | ".join(values)
+
+    def _scheduled_date_folder(self, entries, fallback=""):
+        candidates = []
+        for item in entries:
+            if str(item.get("status") or "").lower() not in {"scheduled", "published"}:
+                continue
+            raw = str(item.get("scheduled_at") or "")
+            try:
+                candidates.append(datetime.fromisoformat(raw).astimezone())
+            except Exception:
+                continue
+        if not candidates and fallback:
+            try:
+                candidates.append(datetime.fromisoformat(str(fallback)).astimezone())
+            except Exception:
+                pass
+        if not candidates:
+            return "Unknown date"
+        return min(candidates).strftime("%Y-%m-%d")
+
+    def _write_scheduled_manifest(self, video_path, entries):
+        video = Path(video_path)
+        payload = {
+            "video": video.name,
+            "scheduled_times": entries,
+            "display_times": self._format_scheduled_times(entries),
+            "note": "Accepted by the platform API. This is scheduled, not yet confirmed public.",
+        }
+        manifest = video.with_name(video.name + ".scheduled.json")
+        manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def organize_clip_after_upload(self, path, yt_enabled=None, fb_enabled=None, selected_pages=None):
+        """Move accepted uploads into Scheduled; move public clips to Safe to delete."""
+        row, entries = self._selected_destination_statuses(
+            path, yt_enabled, fb_enabled, selected_pages
+        )
+        if not row or not entries:
             return False
 
-        statuses = []
-        yt_status = str(row["yt_status"] or "Pending").strip().lower()
-        if row["yt_video_id"] or yt_status not in {"", "pending"}:
-            statuses.append(yt_status)
-        statuses.extend(str(job["status"] or "Pending").strip().lower() for job in jobs)
+        accepted_states = {"scheduled", "published"}
+        all_accepted = all(
+            str(item["status"] or "").strip().lower() in accepted_states
+            and bool(item.get("external_id"))
+            for item in entries
+        )
+        current_state = str(row.get("storage_state") or "source").lower()
+        statuses = [str(item["status"] or "").strip().lower() for item in entries]
 
-        if not statuses:
-            return False
-
-        published_states = {"published"}
-        scheduled_states = {"scheduled"}
-        uploaded_states = {"uploaded"}
-        if all(status in (published_states | scheduled_states) for status in statuses):
-            # Even an individually published clip stays in schedule until the
-            # entire queued timeline is verified complete by the batch finalizer.
-            destination = "schedule"
-        elif all(status in uploaded_states for status in statuses):
-            destination = "uploaded"
+        if all_accepted:
+            # Once every selected destination has received the complete video and
+            # returned an accepted scheduled/published ID, the local source is no
+            # longer required for publishing. Publication time may still be future.
+            destination = SAFE_TO_DELETE_FOLDER
         else:
-            # Pending, failed, skipped, unknown, or partially completed clips
-            # belong back in the source folder, never in a success/safe folder.
+            # One or more destinations are still Pending/Failed/Partial/Unknown.
+            # Keep the original MP4/TXT available until every selected destination
+            # has accepted the upload.
             destination = "__source__"
 
+        current_path = Path(path)
+        target_folder = (
+            Path(self.folder_var.get().strip())
+            if destination == "__source__"
+            else Path(self.folder_var.get().strip()) / Path(destination)
+        )
         try:
-            return bool(self.move_clip_files(path, destination))
+            moved_path = self.move_clip_files(path, destination)
+            if not moved_path:
+                return False
+            if destination != "__source__" and destination != SAFE_TO_DELETE_FOLDER:
+                self._write_scheduled_manifest(moved_path, entries)
+            elif destination == SAFE_TO_DELETE_FOLDER:
+                manifest = Path(moved_path).with_name(Path(moved_path).name + ".scheduled.json")
+                manifest.write_text(
+                    json.dumps({
+                        "video": Path(moved_path).name,
+                        "scheduled_times": entries,
+                        "display_times": self._format_scheduled_times(entries),
+                        "note": "Every selected destination accepted the complete upload through its API. The post may still be scheduled for a future time.",
+                    }, ensure_ascii=False, indent=2),
+                    encoding="utf-8"
+                )
+            changed = Path(moved_path).resolve() != current_path.resolve()
+            if changed:
+                self.log(
+                    f"{Path(moved_path).name} moved to "
+                    f"{'Safe to delete (API accepted)' if destination == SAFE_TO_DELETE_FOLDER else 'Detected clips'}."
+                )
+            return changed or current_state == ("safe_to_delete" if destination == SAFE_TO_DELETE_FOLDER else "source")
         except Exception as exc:
             self.log(f"Automatic file sorting failed for {Path(path).name}: {exc}")
             logger.exception("Automatic file sorting failed for %s", path)
             return False
 
-    def all_recorded_destinations_published(self):
-        """Return True only when every YouTube/Page destination recorded in this queue is public."""
+    def all_recorded_destinations_accepted(self):
+        """Return True only when every recorded YouTube/Page upload was accepted with an external ID."""
         with self.db_lock:
             clip_rows = self.conn.execute(
-                "SELECT path, yt_status, yt_video_id, publish_at FROM clips"
+                "SELECT path, yt_status, yt_video_id FROM clips"
             ).fetchall()
             page_rows = self.conn.execute(
-                "SELECT path, page_id, status FROM facebook_page_jobs"
+                "SELECT path, page_id, status, video_id FROM facebook_page_jobs"
             ).fetchall()
 
+        accepted_states = {"scheduled", "published"}
         planned_destinations = 0
         for row in clip_rows:
-            has_youtube_target = bool(
-                row["yt_video_id"] or row["publish_at"] or
-                str(row["yt_status"] or "Pending") not in {"", "Pending"}
-            )
+            status = str(row["yt_status"] or "Pending").strip().lower()
+            has_youtube_target = bool(row["yt_video_id"]) or status not in {"", "pending", "choose platform"}
             if has_youtube_target:
                 planned_destinations += 1
-                if str(row["yt_status"] or "").lower() != "published":
+                if status not in accepted_states or not row["yt_video_id"]:
                     return False
 
         for job in page_rows:
             planned_destinations += 1
-            if str(job["status"] or "").lower() != "published":
+            if str(job["status"] or "").strip().lower() not in accepted_states or not job["video_id"]:
                 return False
 
         return planned_destinations > 0
 
     def move_completed_queue_to_safe_folder(self):
-        """Move the whole scheduled batch only after every recorded destination is published."""
-        if not self.all_recorded_destinations_published():
-            return 0
-        moved_count = 0
+        """Recheck API-accepted clips and report how many local copies are in the Safe to delete folder."""
         for row in self.get_clips():
-            with self.db_lock:
-                page_jobs = self.conn.execute(
-                    "SELECT status FROM facebook_page_jobs WHERE path=?",
-                    (row["path"],)
-                ).fetchall()
-            statuses = []
-            has_youtube_target = bool(
-                row.get("yt_video_id") or row.get("publish_at") or
-                str(row.get("yt_status") or "Pending") not in {"", "Pending"}
-            )
-            if has_youtube_target:
-                statuses.append(str(row.get("yt_status") or "").lower())
-            statuses.extend(str(job["status"] or "").lower() for job in page_jobs)
-            if statuses and all(status == "published" for status in statuses):
-                try:
-                    if self.move_clip_files(row["path"], "You can delete these clips now"):
-                        moved_count += 1
-                except Exception as exc:
-                    self.log(f"Could not move verified clip {Path(row['path']).name} to the final review folder: {exc}")
-        self.log(
-            f"All recorded scheduled destinations are verified Published. "
-            f"Moved {moved_count} clip(s) into 'You can delete these clips now'."
-        )
-        return moved_count
+            self.organize_clip_after_upload(row["path"])
+        with self.db_lock:
+            safe_count = self.conn.execute(
+                "SELECT COUNT(*) FROM clips WHERE storage_state='scheduled' AND safe_to_delete=1"
+            ).fetchone()[0]
+        self.log(f"Per-clip API acceptance check complete. {safe_count} accepted clip(s) are in 'You can delete this'.")
+        return safe_count
 
     def check_publication_status(self, show_dialog=True):
         """Manually request a background check of all scheduled posts that are now due."""
@@ -3500,10 +3717,10 @@ class SchedulerApp:
             "upload_phase": "FINISH",
             "video_state": "SCHEDULED",
             "scheduled_publish_time": str(int(publish_at.timestamp())),
-            # Meta's Reel caption is the visible text users read under the Reel.
-            # Keep the separate title metadata, but lead the caption with that
-            # same title so the description is never the first/only visible text.
-            "title": title[:100],
+            # Meta's Reel metadata fields must carry the same complete caption.
+            # Do not send a title-only value: trailing description lines, creator
+            # credits and hashtags are part of the same caption users see.
+            "title": facebook_reel_caption(title, description),
             "description": facebook_reel_caption(title, description),
             "is_ai_generated": "true" if is_ai else "false",
         }

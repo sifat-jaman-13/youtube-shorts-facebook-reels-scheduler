@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.16 — Native Windows WPF desktop scheduler**
+**Version 2.0.17 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -53,8 +53,10 @@ ScarClipScheduler manages a queue of MP4 clips and matching TXT metadata, then s
 - **Selective scheduling:** choose one clip, a group of clips, or the full queue.
 - **Metadata editing:** review and edit the title and description for each selected video.
 - **Schedule controls:** choose the first post date, select the hour and AM/PM, type minutes in the minute box, and set an interval in hours and minutes. Dates before today and first-post times that have already passed are rejected.
-- **Accepted-post filter:** hide accepted/scheduled items from the list without deleting their records.
-- **Safe queue removal:** remove local queue entries without deleting the source MP4/TXT files or cancelling posts already accepted by a platform.
+- **Separate Scheduled screen:** API-accepted clips leave Detected immediately and appear in a dedicated Scheduled list with accepted publish times for YouTube and each Facebook Page.
+- **Safe to delete folder:** after every selected destination accepts the complete upload and returns its video/Reel ID, the MP4/TXT pair moves out of the watched source folder into `You can delete this`. A large green **SAFE TO DELETE** button opens that folder.
+- **Clear history:** clear Scheduled rows from the app after a verified SQLite backup while preserving permanent upload receipts and SHA-256 duplicate protection.
+- **Safe queue removal:** remove selected queue entries without cancelling posts already accepted by a platform.
 - **Publication verification:** check platform status after the scheduled time.
 - **About:** credits Sifat Jaman / ScarZero and ChatGPT by OpenAI and links to the creator's public GitHub projects and channels.
 
@@ -78,13 +80,13 @@ Use **Quit** inside the app to close ScarClipScheduler. If a scan, upload or ver
 8. Click **Confirm start time**. The app saves the selected time and interval. Editing the date, time, or interval clears the confirmation; confirm again before scheduling.
 9. Choose YouTube Shorts, Facebook Page Reels, or both. Confirm that you have the rights to publish the videos, then choose **Schedule queue** and approve the final summary.
 
-The app uploads the videos now and asks the selected platform APIs to publish them at the requested times. A platform's accepted response is recorded as scheduled; it does not mean the video is already public. The app can verify publication later.
+The app uploads the videos now and asks the selected platform APIs to publish them at the requested times. A platform's accepted response is recorded as Scheduled; this means the API accepted the complete video and scheduled post, not that it is already public. As soon as every destination selected for a clip has accepted it and returned its external video/Reel ID, the MP4 and matching TXT are moved out of the watched source folder into `You can delete this` and the record leaves Detected. The separate Scheduled screen retains the clip, platform IDs and accepted publish times. The local files are no longer required for the accepted scheduled posts and can be manually deleted from that folder.
 
 The first unaccepted clip uses the confirmed start time; each following clip uses the selected interval. The app does not silently replace the chosen time after a scan. The first post must be at least 15 minutes ahead of the current local time.
 
 YouTube's daily upload quota can defer remaining YouTube work to the next quota window. Facebook uploads are attempted sequentially without an app-imposed per-day cap; the queue keeps going until Meta itself returns an API rejection. A definite Meta API rejection marks only that Page's clip as Failed and moves its publish slot to the immediately following local calendar day. Use **Reset failed** and start the queue again to retry the rejected clip. An ambiguous network outcome stays Partial and is locked against automatic re-upload until you verify it in Meta Business Suite. Already accepted platform schedules are never resubmitted.
 
-The native app's **How to use** page contains a visual filename-pairing example, TXT layout, and step-by-step scanning instructions.
+The native app's **How to use** page explains MP4/TXT naming, automatic detection, the Detected-to-Scheduled workflow, the Safe to delete folder, and the effects of Clear history. The green **SAFE TO DELETE** button at the top opens the selected source folder's `You can delete this` subfolder in File Explorer.
 
 ### Upload history and duplicate protection (SQLite)
 
@@ -124,6 +126,8 @@ Create a Meta developer app, configure the required Page permissions, and enter 
 
 The app shows the Facebook connection state and the number of Pages available. **Reconnect Facebook** starts the authorization flow again. **Disconnect** removes saved Page tokens and connection details from this PC; it does not cancel Reels already accepted and scheduled by Facebook.
 
+For Facebook Reels, the caption is assembled as the clip title, a blank line, then the full TXT description. ScarClipScheduler sends that exact same complete caption string in both Meta `title` and `description` fields. This avoids Facebook displaying only a trailing description fragment (for example, a “Clip from @creator” credit or hashtags) as the Reel's title.
+
 Disconnecting is local to this installation. To revoke the app's permissions at the platform level, use the relevant Google or Facebook account settings.
 
 ## Clip folder and TXT format
@@ -153,11 +157,17 @@ The first non-empty TXT line becomes the video title. The remaining lines become
 
 The visible overall status is **Partial** when the selected destinations do not all share the same successful state. The YouTube and Facebook status columns still show each platform's own state.
 
-The **Hide accepted** control hides fully scheduled/published items from the visible list. It does not delete them from the database.
+**Detected** contains only clips that still need work for at least one selected destination. A clip accepted by every destination selected for that upload leaves Detected automatically.
 
-**Delete from list** removes selected local queue records and their per-Page job history. It does not delete source MP4/TXT files and does not cancel a post already accepted by YouTube or Meta.
+**Scheduled** contains clips for which every selected destination accepted the complete upload through its API and returned a video/Reel ID. The list shows the publish time for each destination. Scheduled does not mean public; it means the platform has accepted the video and future publication request.
 
-The app keeps separate local locations for scheduled, uploaded, pending and failed work. The **You can delete these clips now** folder is a manual-review area; the app does not automatically delete videos.
+The MP4 and matching TXT are moved out of the scanned source folder into the `You can delete this` subfolder as soon as all selected destinations accept the complete upload and return their external IDs. This keeps them from being scanned and uploaded again. The top **SAFE TO DELETE** button opens that folder. Files in it are manual cleanup items: ScarClipScheduler does not permanently delete them. You may delete the local copies when you no longer need them; checking the platform's scheduled-content list is optional and does not control the local move.
+
+If one or more selected destinations are still Pending, Failed, Partial, or uncertain, the clip stays in Detected and its source files remain available. It is moved only after all selected destinations have accepted it.
+
+**Clear history** on the Scheduled screen removes the visible Scheduled rows from the app after creating and verifying a SQLite backup. It does not cancel or remove any post on YouTube/Meta, does not delete MP4/TXT files from `You can delete this`, and does not erase the permanent `upload_ledger`. External platform IDs and SHA-256 fingerprints remain protected so clearing the display cannot make an accepted video eligible for upload again.
+
+**Delete from list** removes selected active local queue records and their per-Page job history. It does not delete source MP4/TXT files and does not cancel a post already accepted by YouTube or Meta.
 
 ## Before you install (Windows)
 

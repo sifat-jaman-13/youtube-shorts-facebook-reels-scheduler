@@ -54,6 +54,14 @@
             <Setter Property="BorderBrush" Value="#713B58"/>
             <Setter Property="Foreground" Value="#FDA4AF"/>
         </Style>
+        <Style x:Key="SafeButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#14532D"/>
+            <Setter Property="BorderBrush" Value="#22C55E"/>
+            <Setter Property="Foreground" Value="#F0FDF4"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="18,12"/>
+        </Style>
         <Style TargetType="TextBox">
             <Setter Property="Background" Value="#202B49"/>
             <Setter Property="Foreground" Value="#F1F5FF"/>
@@ -266,6 +274,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Width="38" Height="38" CornerRadius="9" Background="#302153" Margin="0,0,12,0">
@@ -277,10 +286,13 @@
                         <TextBlock Text="YouTube Shorts | Facebook Page Reels" Foreground="#9AA8C4" FontSize="11" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock x:Name="ConnectionSummary" Grid.Column="1" Text="Connecting to publishing engine..."
+                <Button x:Name="SafeToDeleteButton" Grid.Column="1" Content="SAFE TO DELETE"
+                        Style="{StaticResource SafeButton}" Click="SafeToDelete_Click"
+                        ToolTip="Open the folder containing clips already accepted by every selected publishing destination."/>
+                <TextBlock x:Name="ConnectionSummary" Grid.Column="2" Text="Connecting to publishing engine..."
                            Foreground="#9AA8C4" VerticalAlignment="Center" Margin="12,0"
                            TextTrimming="CharacterEllipsis" MaxWidth="285"/>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="About" Click="About_Click" Width="82"/>
                     <Button Content="Quit" Style="{StaticResource DangerButton}" Click="Quit_Click" Width="72"/>
                 </StackPanel>
@@ -296,7 +308,8 @@
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top">
                         <TextBlock Text="WORKSPACE" Foreground="#73829F" FontSize="10" FontWeight="Bold" Margin="8,7,8,9"/>
-                        <Button x:Name="NavQueue" Content="Publishing queue" Style="{StaticResource NavButton}" Click="NavQueue_Click" Background="#302153"/>
+                        <Button x:Name="NavQueue" Content="Detected clips" Style="{StaticResource NavButton}" Click="NavQueue_Click" Background="#302153"/>
+                        <Button x:Name="NavScheduled" Content="Scheduled" Style="{StaticResource NavButton}" Click="NavScheduled_Click"/>
                         <Button x:Name="NavConnections" Content="Connections" Style="{StaticResource NavButton}" Click="NavConnections_Click"/>
                         <Button x:Name="NavActivity" Content="Activity log" Style="{StaticResource NavButton}" Click="NavActivity_Click"/>
                         <Button x:Name="NavHowTo" Content="How to use" Style="{StaticResource NavButton}" Click="NavHowTo_Click"/>
@@ -304,7 +317,7 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="5,0,5,5">
                         <Separator Background="#293653" Margin="0,10"/>
                         <TextBlock Text="NATIVE WINDOWS UI" Foreground="#9AA8C4" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock Text=".NET 10 WPF | Version 2.0.16" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
+                        <TextBlock Text=".NET 10 WPF | Version 2.0.17" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
                         <TextBlock Text="API worker runs separately." Foreground="#73829F" FontSize="10" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>
@@ -437,9 +450,7 @@
                             <TextBlock x:Name="QueueSummary" Foreground="#C7D3EA"
                                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                        ToolTip="Counts include every queue item and status."/>
-                            <CheckBox x:Name="HideAcceptedCheck" Grid.Column="1" Content="Hide accepted"
-                                      IsChecked="True" Checked="HideAccepted_Changed"
-                                      Unchecked="HideAccepted_Changed" Margin="10,0,2,0"/>
+
                         </Grid>
                     </Border>
 
@@ -498,6 +509,49 @@
                                      VerticalContentAlignment="Top" Margin="0,7,0,0"/>
                         </Grid>
                     </GroupBox>
+                </Grid>
+
+                <!-- Scheduled posts -->
+                <Grid x:Name="ScheduledPage" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0" Margin="5,5,5,10">
+                        <StackPanel>
+                            <TextBlock Text="Scheduled posts" FontSize="21" FontWeight="Bold"/>
+                            <TextBlock Text="These clips have been accepted by every destination selected for their upload."
+                                       Foreground="#9AA8C4" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <Button x:Name="ClearHistoryButton" DockPanel.Dock="Right" Content="Clear history"
+                                Style="{StaticResource DangerButton}" Click="ClearHistory_Click"
+                                ToolTip="Remove Scheduled rows from this app only. Does not cancel platform posts or delete files."/>
+                    </DockPanel>
+                    <Border Grid.Row="1" Background="#172239" BorderBrush="#293653" BorderThickness="1"
+                            CornerRadius="7" Padding="11,9" Margin="0,0,0,9">
+                        <TextBlock Foreground="#DCE5F8" TextWrapping="Wrap">
+                            <Run Text="Scheduled means YouTube or Meta accepted the complete video upload and returned its post/video ID. The post may be waiting for its future publish time; it does not need to be public yet. "/>
+                            <Run Text="The MP4 and matching TXT have been moved out of the watched source folder into "/>
+                            <Run Text="You can delete this" FontWeight="Bold" Foreground="#86EFAC"/>
+                            <Run Text=". Use the green SAFE TO DELETE button at the top to open it. Clearing history does not delete those files or erase the permanent duplicate-protection ledger."/>
+                        </TextBlock>
+                    </Border>
+                    <Border Grid.Row="2" Background="#121A2D" BorderBrush="#293653" BorderThickness="1"
+                            CornerRadius="9" Padding="8">
+                        <DataGrid x:Name="ScheduledGrid" ItemsSource="{Binding ScheduledClips}"
+                                  AutoGenerateColumns="False" CanUserSortColumns="True"
+                                  IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Number}" Width="42" ElementStyle="{StaticResource GridCellText}"/>
+                                <DataGridTextColumn Header="Video file" Binding="{Binding File}" Width="210" ElementStyle="{StaticResource FileCellText}"/>
+                                <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="230" ElementStyle="{StaticResource TitleCellText}"/>
+                                <DataGridTextColumn Header="Accepted publish time(s)" Binding="{Binding ScheduledTimes}" Width="*" MinWidth="250" ElementStyle="{StaticResource DescriptionCellText}"/>
+                                <DataGridTextColumn Header="YouTube" Binding="{Binding YoutubeStatus}" Width="95" ElementStyle="{StaticResource GridCellText}"/>
+                                <DataGridTextColumn Header="Facebook" Binding="{Binding FacebookStatus}" Width="95" ElementStyle="{StaticResource GridCellText}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
                 </Grid>
 
                 <!-- Connections -->
@@ -630,7 +684,7 @@
                                     <TextBlock FontFamily="Consolas" Foreground="#A7F3D0"
                                                Text="My best gaming moment&#x0a;&#x0a;Watch until the end for the funniest part!&#x0a;#shorts #gaming"/>
                                 </Border>
-                                <TextBlock Text="YouTube titles are limited to 100 characters; longer titles are shortened automatically. Add your description, hashtags, and other metadata below the title."
+                                <TextBlock Text="YouTube titles are limited to 100 characters; longer titles are shortened automatically. Add your description, hashtags, and other metadata below the title. For Facebook Reels, ScarClipScheduler combines the title and description into one caption and sends that exact same complete text in both Meta title and description fields."
                                            TextWrapping="Wrap" Foreground="#9AA8C4"/>
                             </StackPanel>
                         </GroupBox>
@@ -669,6 +723,20 @@
                                 <TextBlock Text="Already accepted posts are not uploaded again. If a platform rejects an upload, the failed destination is marked Error and its retry slot is moved to tomorrow. Use Reset failed and start the queue again to retry it; keep the app open while the queue is actively processing."
                                            TextWrapping="Wrap" Foreground="#FBBF24" Margin="0,6,0,0"/>
                                 <TextBlock Text="Stop queue allows the active platform request to finish. It does not cancel posts already accepted by YouTube or Facebook. Those must be cancelled separately in YouTube Studio or Meta Business Suite."
+                                           TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="8. SCHEDULED POSTS AND SAFE TO DELETE">
+                            <StackPanel>
+                                <TextBlock Text="As soon as every destination selected for a clip accepts the complete upload through its API and returns an external video/Reel ID, the clip is removed from Detected. This means the platforms have received the video and accepted the scheduled post; it does NOT mean the post is already public."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8"/>
+                                <TextBlock Text="The MP4 and matching TXT are moved out of the watched source folder into a subfolder named You can delete this. The large green SAFE TO DELETE button at the top opens that folder in File Explorer. You may manually delete those local copies when you no longer need them. ScarClipScheduler never permanently deletes them."
+                                           TextWrapping="Wrap" Foreground="#A7F3D0" Margin="0,6,0,0"/>
+                                <TextBlock Text="Open Scheduled in the left navigation to see accepted clips and each YouTube channel/Facebook Page publish time. The local SQLite upload ledger retains the external IDs and content fingerprints even if you delete the MP4/TXT or clear the Scheduled screen, so the same video is not uploaded again."
+                                           TextWrapping="Wrap" Foreground="#DCE5F8" Margin="0,6,0,0"/>
+                                <TextBlock Text="A clip accepted by only some selected destinations stays in Detected with its source files until every selected destination accepts it. Failed or uncertain uploads also remain available for retry or verification."
+                                           TextWrapping="Wrap" Foreground="#FBBF24" Margin="0,6,0,0"/>
+                                <TextBlock Text="Clear history removes the visible Scheduled rows from this app only. It first makes a verified SQLite backup. It does NOT cancel platform posts, delete files from You can delete this, or erase the permanent upload ledger. Cleared rows cannot be restored from the app, but their duplicate-prevention receipts remain protected."
                                            TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
                             </StackPanel>
                         </GroupBox>

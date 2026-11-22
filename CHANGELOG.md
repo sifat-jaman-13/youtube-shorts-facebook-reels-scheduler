@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.0.17] - 2026-11-22
+
+### Added
+
+- Added a dedicated Scheduled screen showing each clip accepted by every selected YouTube/Facebook destination, including the accepted publish time for each destination.
+- Added a prominent **SAFE TO DELETE** button that opens the source folder's `You can delete this` subfolder.
+- Moved MP4/TXT pairs out of the watched source folder as soon as every selected destination accepts the complete upload and returns its external video/Reel ID. The local copy no longer needs to remain in Detected while the platform waits for its publish time.
+- Added **Clear history** to remove visible Scheduled rows after a verified SQLite backup while preserving permanent upload-ledger rows, external IDs and SHA-256 duplicate protection.
+- Updated the in-app How to guide and GitHub README with the Scheduled / Safe to delete / Clear history workflow.
+
+### Fixed
+
+- Facebook Reel `title` and `description` now receive the same complete caption value.
+- Migrated accepted clips from the legacy `You can delete these clips now` folder into `You can delete this` without dropping upload history or allowing them to be scanned again.
+
 ## [2.0.16] - 2026-11-22
 
 ### Fixed

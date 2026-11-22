@@ -166,6 +166,16 @@ class NativeBackend(core.SchedulerApp):
         self.next_event_id = 1
         self.dialogs = DialogBridge(self)
         core.messagebox = self.dialogs
+        # Migrate accepted clips before the first UI state refresh, so posts
+        # already accepted by the platform never reappear in Detected after an update.
+        # A file-system permission/collision issue must not prevent the desktop
+        # app from opening; keep the row and report the migration problem instead.
+        if Path(self.folder_var.get().strip()).is_dir():
+            try:
+                core.SchedulerApp.ensure_output_folders(self)
+            except Exception as exc:
+                core.logger.exception("Startup scheduled-clip migration failed: %s", exc)
+                self.log(f"Startup file migration needs attention: {exc}")
 
     def emit(self, kind, data=None):
         with self.event_lock:
@@ -278,6 +288,9 @@ class NativeBackend(core.SchedulerApp):
                         "publish_at": job.get("publish_at") or "",
                         "error": job.get("error") or "",
                     })
+            _, selected_entries = self._selected_destination_statuses(
+                row["path"], include_yt, include_fb, pages
+            )
             decorated.append({
                 "path": row["path"],
                 "file": Path(row["path"]).name,
@@ -291,10 +304,15 @@ class NativeBackend(core.SchedulerApp):
                 "yt_status": row.get("yt_status") or "Pending",
                 "fb_status": row.get("fb_status") or "Pending",
                 "publish_at": row.get("publish_at") or "",
+                "scheduled_times": self._format_scheduled_times(selected_entries),
+                "storage_state": row.get("storage_state") or "source",
                 "yt_video_id": row.get("yt_video_id") or "",
                 "facebook_pages": per_page,
             })
         decorated.sort(key=lambda item: self.queue_row_sort_key((item, item["queue_status"])))
+        active_rows = [row for row in decorated if row["storage_state"] == "source"]
+        scheduled_rows = [row for row in decorated if row["storage_state"] == "scheduled"]
+        # Published files are moved to Safe to delete and remain only in the permanent ledger.
         counts = {}
         for row in decorated:
             counts[row["queue_status"]] = counts.get(row["queue_status"], 0) + 1
@@ -334,9 +352,12 @@ class NativeBackend(core.SchedulerApp):
             "youtube_connecting": bool(self.youtube_auth_worker and self.youtube_auth_worker.is_alive()),
             "facebook_connecting": bool(self.facebook_auth_worker and self.facebook_auth_worker.is_alive()),
             "facebook_pages": all_pages,
-            "rows": decorated,
+            "rows": active_rows,
+            "scheduled_rows": scheduled_rows,
+            "detected_total": len(active_rows),
+            "scheduled_total": len(scheduled_rows),
             "counts": counts,
-            "total": len(decorated),
+            "total": len(active_rows) + len(scheduled_rows),
             "busy": active,
             "queue_running": bool(self.worker and self.worker.is_alive()),
             "scan_running": bool(self.scan_worker and self.scan_worker.is_alive()),
@@ -348,12 +369,11 @@ class NativeBackend(core.SchedulerApp):
         folder = Path(self.folder_var.get().strip())
         if not folder.is_dir():
             raise RuntimeError(f"Clip source folder does not exist: {folder}")
-        for name in ("uploaded", "schedule", "You can delete these clips now"):
-            (folder / name).mkdir(parents=True, exist_ok=True)
-        safe_note = folder / "You can delete these clips now" / "READ ME FIRST.txt"
+        core.SchedulerApp.ensure_output_folders(self)
+        safe_note = folder / core.SAFE_TO_DELETE_FOLDER / "READ ME FIRST.txt"
         if not safe_note.exists():
             safe_note.write_text(
-                "Only API-verified published clips are moved here. This folder is for manual review; "
+                "Files are moved here after every selected destination accepts the complete upload through its API. "
                 "the application never deletes local video files.\n",
                 encoding="utf-8"
             )
@@ -569,6 +589,78 @@ class NativeBackend(core.SchedulerApp):
         core.SchedulerApp.reset_failed(self)
         self.emit("state_changed")
 
+    def clear_scheduled_history(self):
+        """Clear only the Scheduled screen; preserve files and permanent upload ledger receipts."""
+        active = [
+            worker for worker in (
+                self.worker, self.scan_worker, self.verification_worker,
+                self.youtube_auth_worker, self.facebook_auth_worker
+            )
+            if worker and worker.is_alive()
+        ]
+        if active:
+            raise RuntimeError("Wait for scanning, publishing and verification to finish before clearing Scheduled history.")
+
+        with self.db_lock:
+            active_database = self.conn.execute("PRAGMA database_list").fetchone()[2]
+            if not active_database:
+                raise RuntimeError("The active queue database path could not be determined; history was not cleared.")
+            database_path = Path(active_database)
+            backup_dir = database_path.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_path = backup_dir / f"queue-before-clear-history-{datetime.now():%Y%m%d-%H%M%S-%f}.sqlite3"
+            self.conn.commit()
+            backup_conn = core.sqlite3.connect(str(backup_path))
+            try:
+                self.conn.backup(backup_conn)
+            finally:
+                backup_conn.close()
+            verify_conn = core.sqlite3.connect(f"file:{backup_path.as_posix()}?mode=ro", uri=True)
+            try:
+                integrity = verify_conn.execute("PRAGMA integrity_check").fetchone()[0]
+            finally:
+                verify_conn.close()
+            if integrity != "ok":
+                raise RuntimeError("Scheduled history backup failed SQLite integrity verification; no history was cleared.")
+
+            scheduled_paths = [
+                str(row["path"])
+                for row in self.conn.execute(
+                    "SELECT path FROM clips WHERE storage_state='scheduled'"
+                ).fetchall()
+            ]
+            if not scheduled_paths:
+                return {"cleared": 0, "upload_receipts_preserved": 0}
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                receipt_count = 0
+                for path in scheduled_paths:
+                    name = Path(path).name
+                    receipt_count += self.conn.execute(
+                        "SELECT COUNT(*) FROM upload_ledger WHERE video_name=?",
+                        (name,)
+                    ).fetchone()[0]
+                    self.conn.execute("DELETE FROM facebook_page_jobs WHERE path=?", (path,))
+                    self.conn.execute(
+                        "DELETE FROM clips WHERE path=? AND storage_state='scheduled'",
+                        (path,)
+                    )
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+
+        self.log(
+            f"Cleared {len(scheduled_paths)} visible Scheduled history row(s). "
+            f"Preserved {receipt_count} permanent upload receipt(s) and all local files."
+        )
+        self.emit("state_changed")
+        return {
+            "cleared": len(scheduled_paths),
+            "upload_receipts_preserved": receipt_count,
+            "files_deleted": 0,
+        }
+
     def export_report(self):
         result = self.export_cleanup_report(show_dialog=False)
         return {"csv": result[0], "txt": result[1]}
@@ -636,6 +728,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "/api/metadata": BACKEND.save_metadata,
                 "/api/delete": BACKEND.delete_rows,
                 "/api/reset-failed": lambda _data: BACKEND.reset_failed(),
+                "/api/clear-history": lambda _data: BACKEND.clear_scheduled_history(),
                 "/api/export-report": lambda _data: BACKEND.export_report(),
             }
             handler = handlers.get(route)
