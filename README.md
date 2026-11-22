@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.4 — Native Windows WPF desktop scheduler**
+**Version 2.0.5 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -194,6 +194,8 @@ When you run **ScarClipScheduler-Setup.exe**, it opens a PowerShell setup window
 4. checks the installed dependency set against the packaged requirements.txt;
 5. installs or repairs packages only when the environment is new, incomplete, unhealthy, or the requirements have changed;
 6. asks whether to launch ScarClipScheduler when setup is complete.
+
+If prerequisite setup fails, the installer now stops instead of showing a successful Finish page. It saves diagnostics to `%LOCALAPPDATA%\\ScarClipScheduler\\installer-setup.log` and leaves the PowerShell window open so you can read the error.
 
 This process runs **during installation only**. Opening ScarClipScheduler later starts the native WPF app and its background worker; it does not open the setup terminal or reinstall Python packages.
 
