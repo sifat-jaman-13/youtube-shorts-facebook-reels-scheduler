@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.10] - 2026-11-22
+
+### Fixed
+
+- Replaced the native WPF ComboBox field template so the closed selection box, selected text, border and dropdown arrow all use the dark application theme instead of the Windows light-theme default.
+- Preserved the dark popup options and selected/hover states introduced in 2.0.9.
+- Added regression checks for the ComboBox field template and selected-value binding.
+
 ## [2.0.9] - 2026-11-22
 
 ### Fixed

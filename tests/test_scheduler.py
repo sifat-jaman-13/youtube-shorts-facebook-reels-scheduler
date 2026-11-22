@@ -763,6 +763,7 @@ class SchedulerRegressionTests(unittest.TestCase):
         build_workflow = (project / ".github" / "workflows" / "build-exe.yml").read_text(encoding="utf-8")
         release_workflow = (project / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         site = (project / "docs" / "index.html").read_text(encoding="utf-8")
+        native_ui = (project / "native" / "ScarClipScheduler.Wpf" / "MainWindow.xaml").read_text(encoding="utf-8")
 
         self.assertIn("ScarClipScheduler-Setup.exe", readme)
         self.assertIn("## Navigation", readme)
@@ -817,6 +818,11 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertNotIn("ScarClipScheduler-Windows-x64.zip", release_workflow)
         self.assertIn("ScarClipScheduler-Setup.exe", site)
         self.assertNotIn("ScarClipScheduler-Windows-x64.zip", site)
+        self.assertIn('<ControlTemplate TargetType="{x:Type ComboBox}">', native_ui)
+        self.assertIn('Background="{Binding Background, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"', native_ui)
+        self.assertIn('Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"', native_ui)
+        self.assertIn('x:Name="PART_Popup"', native_ui)
+        self.assertIn('<Path Data="M 0,0 L 4,4 L 8,0 Z"', native_ui)
 
 if __name__ == "__main__":
     unittest.main()

@@ -95,12 +95,86 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style TargetType="ComboBox">
+        <Style TargetType="{x:Type ComboBox}">
             <Setter Property="Background" Value="#202B49"/>
             <Setter Property="Foreground" Value="#F1F5FF"/>
             <Setter Property="BorderBrush" Value="#344363"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="7,5"/>
             <Setter Property="ItemContainerStyle" Value="{StaticResource {x:Type ComboBoxItem}}"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid SnapsToDevicePixels="True">
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                        <Border x:Name="ToggleBorder"
+                                                Background="{Binding Background, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                CornerRadius="4">
+                                            <Grid>
+                                                <ContentPresenter Margin="8,3,28,3"
+                                                                  HorizontalAlignment="Left"
+                                                                  VerticalAlignment="Center"
+                                                                  IsHitTestVisible="False"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                                  ContentStringFormat="{Binding SelectionBoxItemStringFormat, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"/>
+                                                <Path Data="M 0,0 L 4,4 L 8,0 Z"
+                                                      Fill="#F1F5FF"
+                                                      HorizontalAlignment="Right"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,9,0"
+                                                      IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ToggleBorder" Property="Background" Value="#293653"/>
+                                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#6578A0"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#8056E8"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="ToggleBorder" Property="Opacity" Value="0.5"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                   IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   PopupAnimation="Fade">
+                                <Border Background="#202B49"
+                                        BorderBrush="#344363"
+                                        BorderThickness="1"
+                                        MinWidth="190">
+                                    <ScrollViewer CanContentScroll="True"
+                                                  MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ToggleButton" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="#DCE5F8"/>
@@ -227,7 +301,7 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="5,0,5,5">
                         <Separator Background="#293653" Margin="0,10"/>
                         <TextBlock Text="NATIVE WINDOWS UI" Foreground="#9AA8C4" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock Text=".NET 10 WPF | Version 2.0.9" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
+                        <TextBlock Text=".NET 10 WPF | Version 2.0.10" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
                         <TextBlock Text="API worker runs separately." Foreground="#73829F" FontSize="10" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>
