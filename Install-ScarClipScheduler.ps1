@@ -63,7 +63,8 @@ function Invoke-CapturedProcess([string]$FilePath, [string[]]$Arguments = @()) {
 
 function Test-SupportedPython([string]$Python) {
     if (-not $Python -or -not (Test-Path -LiteralPath $Python -PathType Leaf)) { return $false }
-    $checkCode = 'import sys; raise SystemExit(0 if (3,11) <= sys.version_info[:2] <= (3,12) and sys.maxsize > 2**32 else 2)'
+    # 64-bit final CPython 3.10 or newer. There is intentionally no upper version cap.
+    $checkCode = 'import sys; raise SystemExit(0 if sys.implementation.name == "cpython" and sys.version_info >= (3,10) and sys.version_info.releaselevel == "final" and sys.maxsize > 2**32 else 2)'
     try {
         $result = Invoke-CapturedProcess -FilePath $Python -Arguments @('-c', $checkCode)
         return ($result.ExitCode -eq 0)
@@ -72,42 +73,77 @@ function Test-SupportedPython([string]$Python) {
 
 function Get-PythonCommand {
     $candidatePaths = New-Object System.Collections.Generic.List[string]
-    # Use one successful launcher listing instead of probing an absent version
-    # with py -3.12, which can abort Windows PowerShell 5.1 under ErrorActionPreference=Stop.
+    # Enumerate every installed interpreter once. This works with py.exe even
+    # when one requested version (such as 3.12) is absent.
     $launcher = Get-Command 'py.exe' -ErrorAction SilentlyContinue
     if ($launcher) {
         try {
             $listing = Invoke-CapturedProcess -FilePath $launcher.Source -Arguments @('-0p')
             if ($listing.ExitCode -eq 0) {
                 foreach ($line in ($listing.StdOut -split [Environment]::NewLine)) {
-                    if ($line -match '^\s*-V:(?<version>3\.(?:12|11))(?:\s+\*)?\s+(?<path>.+?pythonw?\.exe)\s*$') {
-                        $candidatePaths.Add($Matches['path'].Trim())
+                    if ($line -match '^\s*-V:(?<tag>\S+)(?:\s+\*)?\s+(?<path>.+?python\.exe)\s*$') {
+                        [void]$candidatePaths.Add($Matches['path'].Trim())
                     }
                 }
+            } else {
+                Write-Host 'Python launcher could not list interpreters; checking standard install paths instead.' -ForegroundColor Yellow
             }
-        } catch { Write-Host "Python launcher listing was unavailable: $($_.Exception.Message)" -ForegroundColor Yellow }
+        } catch {
+            Write-Host "Python launcher listing was unavailable: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
     }
-    # Standard python.org locations and PATH are fallbacks if the launcher is unavailable.
-    $candidatePaths.Add((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'))
-    $candidatePaths.Add((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'))
-    $candidatePaths.Add((Join-Path $env:ProgramFiles 'Python312\python.exe'))
-    $candidatePaths.Add((Join-Path $env:ProgramFiles 'Python311\python.exe'))
-    $candidatePaths.Add('C:\Python312\python.exe')
-    $candidatePaths.Add('C:\Python311\python.exe')
+
+    # Fallback for python.org installs where the launcher is not present or
+    # its listing does not include the executable.
+    foreach ($minor in 15..10) {
+        $directoryName = 'Python3' + $minor
+        [void]$candidatePaths.Add((Join-Path $env:LOCALAPPDATA ('Programs\Python\' + $directoryName + '\python.exe')))
+        [void]$candidatePaths.Add((Join-Path $env:ProgramFiles ($directoryName + '\python.exe')))
+        [void]$candidatePaths.Add(('C:\' + $directoryName + '\python.exe'))
+    }
     $pythonCommand = Get-Command 'python.exe' -ErrorAction SilentlyContinue
-    if ($pythonCommand) { $candidatePaths.Add($pythonCommand.Source) }
+    if ($pythonCommand) { [void]$candidatePaths.Add($pythonCommand.Source) }
+
     $seen = @{}
+    $validCandidates = New-Object System.Collections.ArrayList
     foreach ($candidate in $candidatePaths) {
         if (-not $candidate) { continue }
-        $fullPath = [IO.Path]::GetFullPath($candidate)
+        try { $fullPath = [IO.Path]::GetFullPath($candidate) } catch { continue }
         if ($seen.ContainsKey($fullPath)) { continue }
         $seen[$fullPath] = $true
-        if (Test-SupportedPython $fullPath) {
-            $versionResult = Invoke-CapturedProcess -FilePath $fullPath -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:2])))')
-            return [pscustomobject]@{ File = $fullPath; Prefix = @(); Executable = $fullPath; Version = $versionResult.StdOut.Trim() }
+        if (-not (Test-SupportedPython $fullPath)) { continue }
+        $versionResult = Invoke-CapturedProcess -FilePath $fullPath -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:3])))')
+        if ($versionResult.ExitCode -ne 0) { continue }
+        try {
+            $runtimeVersion = [version]$versionResult.StdOut.Trim()
+            [void]$validCandidates.Add([pscustomobject]@{ Path = $fullPath; RuntimeVersion = $runtimeVersion })
+        } catch { continue }
+    }
+
+    $selected = $validCandidates | Sort-Object -Property RuntimeVersion -Descending | Select-Object -First 1
+    if ($selected) {
+        return [pscustomobject]@{
+            File = $selected.Path
+            Prefix = @()
+            Executable = $selected.Path
+            Version = $selected.RuntimeVersion.ToString(2)
         }
     }
     return $null
+}
+
+function Write-ProcessOutput($Result) {
+    if ($Result.StdOut) { Write-Host $Result.StdOut.TrimEnd() }
+    if ($Result.StdErr) { Write-Host $Result.StdErr.TrimEnd() -ForegroundColor DarkGray }
+}
+
+function Invoke-SetupCommand([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage) {
+    $result = Invoke-CapturedProcess -FilePath $FilePath -Arguments $Arguments
+    Write-ProcessOutput $result
+    if ($result.ExitCode -ne 0) {
+        throw "$FailureMessage (exit code $($result.ExitCode)). $($result.StdErr.Trim())"
+    }
+    return $result
 }
 function Refresh-ProcessPath {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -117,7 +153,7 @@ function Refresh-ProcessPath {
 }
 
 Write-Host ''
-Write-Host 'ScarClipScheduler 2.0.6 — installation checks' -ForegroundColor Cyan
+Write-Host 'ScarClipScheduler 2.0.7 — installation checks' -ForegroundColor Cyan
 Write-Host 'This setup check runs during installation, not when you launch the app.' -ForegroundColor Gray
 Write-Host ''
 
@@ -166,38 +202,41 @@ if (-not (Test-Path $pythonVenv)) {
         $winget = Get-Command 'winget.exe' -ErrorAction SilentlyContinue
         if (-not $winget) {
             Start-Process 'https://www.python.org/downloads/windows/'
-            throw '64-bit Python 3.11 or 3.12 was not found and WinGet is unavailable. Install Python 3.12, reopen the installer, and try again.'
+            Start-Process 'https://apps.microsoft.com/detail/9NBLGGH4NNS1'
+            throw 'No compatible 64-bit Python 3.10+ runtime was found and WinGet is unavailable. Windows App Installer is required for automatic Python setup. Install/update App Installer, then rerun ScarClipScheduler Setup.'
         }
 
-        Write-Host 'No supported Python was found. Installing Python 3.12 for the current Windows user...' -ForegroundColor Yellow
-        & $winget.Source install --id Python.Python.3.12 --exact --source winget --scope user --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) {
-            throw "WinGet could not install Python 3.12 (exit code $LASTEXITCODE)."
-        }
+        Write-Host 'No compatible Python 3.10+ runtime was found. Downloading and installing Python 3.14 for the current Windows user...' -ForegroundColor Yellow
+        $wingetArgs = @(
+            'install', '--id', 'Python.Python.3.14', '--exact', '--source', 'winget',
+            '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements'
+        )
+        Invoke-SetupCommand -FilePath $winget.Source -Arguments $wingetArgs -FailureMessage 'WinGet could not install Python 3.14.' | Out-Null
         Refresh-ProcessPath
         $python = Get-PythonCommand
         if (-not $python) {
-            $knownPython = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
+            $knownPython = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'
             if (Test-SupportedPython $knownPython) {
+                $versionResult = Invoke-CapturedProcess -FilePath $knownPython -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:2])))')
                 $python = [pscustomobject]@{
                     File = $knownPython
                     Prefix = @()
                     Executable = $knownPython
-                    Version = '3.12'
+                    Version = $versionResult.StdOut.Trim()
                 }
             }
         }
         if (-not $python) {
-            throw 'Python 3.12 installation completed but its executable could not be found. Reopen Windows PowerShell and run the installer again.'
+            throw 'WinGet reported Python 3.14 installation complete, but no compatible Python executable could be found. Check installer-setup.log and rerun setup.'
         }
     }
 
     Write-Host "Using Python $($python.Version): $($python.Executable)" -ForegroundColor Green
     Write-Host 'Creating the isolated publishing-worker environment...' -ForegroundColor Gray
-    $venvArgs = @($python.Prefix) + @('-m', 'venv', (Join-Path $install '.venv'))
-    & $python.File @venvArgs
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $pythonVenv)) {
-        throw 'Could not create the isolated Python environment.'
+    $venvArgs = @('-m', 'venv', (Join-Path $install '.venv'))
+    Invoke-SetupCommand -FilePath $python.File -Arguments $venvArgs -FailureMessage 'Could not create the isolated Python environment.' | Out-Null
+    if (-not (Test-Path $pythonVenv)) {
+        throw 'Python returned success, but the isolated environment executable was not created.'
     }
 }
 
@@ -210,10 +249,10 @@ $dependenciesReady = $false
 
 if ($savedHash -eq $requirementsHash -and (Test-SupportedPython $pythonVenv)) {
     Write-Host 'Checking the existing publishing-worker packages...' -ForegroundColor Gray
-    & $pythonVenv -m pip check
-    if ($LASTEXITCODE -eq 0) {
-        & $pythonVenv -c 'import requests, googleapiclient, google.auth, google_auth_oauthlib, google_auth_httplib2, tzdata' 2>$null
-        if ($LASTEXITCODE -eq 0) {
+    $healthCheck = Invoke-CapturedProcess -FilePath $pythonVenv -Arguments @('-m', 'pip', 'check')
+    if ($healthCheck.ExitCode -eq 0) {
+        $importCheck = Invoke-CapturedProcess -FilePath $pythonVenv -Arguments @('-c', 'import requests, googleapiclient, google.auth, google_auth_oauthlib, google_auth_httplib2, tzdata')
+        if ($importCheck.ExitCode -eq 0) {
             $dependenciesReady = $true
         }
     }
@@ -223,14 +262,10 @@ if ($dependenciesReady) {
     Write-Host 'Required Python packages are already installed and healthy. Skipping package installation.' -ForegroundColor Green
 } else {
     Write-Host 'Installing or repairing publishing-worker dependencies...' -ForegroundColor Yellow
-    & $pythonVenv -m pip install --disable-pip-version-check --upgrade pip
-    if ($LASTEXITCODE -ne 0) { throw 'Could not update pip.' }
-    & $pythonVenv -m pip install --disable-pip-version-check --prefer-binary -r $requirements
-    if ($LASTEXITCODE -ne 0) { throw 'Could not install the publishing-worker dependencies.' }
-    & $pythonVenv -m pip check
-    if ($LASTEXITCODE -ne 0) { throw 'The installed Python dependencies are inconsistent.' }
-    & $pythonVenv -c 'import requests, googleapiclient, google.auth, google_auth_oauthlib, google_auth_httplib2, tzdata'
-    if ($LASTEXITCODE -ne 0) { throw 'A required publishing dependency could not be imported after installation.' }
+    Invoke-SetupCommand -FilePath $pythonVenv -Arguments @('-m', 'pip', 'install', '--disable-pip-version-check', '--upgrade', 'pip') -FailureMessage 'Could not update pip.' | Out-Null
+    Invoke-SetupCommand -FilePath $pythonVenv -Arguments @('-m', 'pip', 'install', '--disable-pip-version-check', '--prefer-binary', '-r', $requirements) -FailureMessage 'Could not install the publishing-worker dependencies.' | Out-Null
+    Invoke-SetupCommand -FilePath $pythonVenv -Arguments @('-m', 'pip', 'check') -FailureMessage 'The installed Python dependencies are inconsistent.' | Out-Null
+    Invoke-SetupCommand -FilePath $pythonVenv -Arguments @('-c', 'import requests, googleapiclient, google.auth, google_auth_oauthlib, google_auth_httplib2, tzdata') -FailureMessage 'A required publishing dependency could not be imported after installation.' | Out-Null
     Set-Content -LiteralPath $dependencyMarker -Value $requirementsHash -Encoding ASCII
     Write-Host 'Publishing-worker dependencies are installed and verified.' -ForegroundColor Green
 }
