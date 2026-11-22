@@ -115,7 +115,7 @@ function Refresh-ProcessPath {
 }
 
 Write-Host ''
-Write-Host 'ScarClipScheduler 2.0.7 — installation checks' -ForegroundColor Cyan
+Write-Host 'ScarClipScheduler 2.0.7 - installation checks' -ForegroundColor Cyan
 Write-Host 'This setup check runs during installation, not when you launch the app.' -ForegroundColor Gray
 Write-Host ''
 
@@ -150,10 +150,10 @@ if (-not [string]::Equals($sourceFull, $installFull, [StringComparison]::Ordinal
 }
 
 # Keep an existing compatible worker runtime. Recreate it only if its Python is
-# outside the versions tested by the project (3.11 and 3.12, 64-bit).
+# outside supported 64-bit CPython 3.10+.
 if (Test-Path $pythonVenv) {
     if (-not (Test-SupportedPython $pythonVenv)) {
-        Write-Host 'The existing worker runtime is not a supported Python 3.11/3.12 environment. Recreating it...' -ForegroundColor Yellow
+        Write-Host 'The existing worker runtime is not a supported 64-bit CPython 3.10+ environment. Recreating it...' -ForegroundColor Yellow
         Remove-Item -LiteralPath (Join-Path $install '.venv') -Recurse -Force
     }
 }
