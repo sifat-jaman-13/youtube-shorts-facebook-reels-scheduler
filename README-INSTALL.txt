@@ -1,4 +1,4 @@
-ScarClipScheduler 2.0.3 — Windows installer
+ScarClipScheduler 2.0.4 — Windows installer
 ============================================
 
 1. Download and run ScarClipScheduler-Setup.exe.
@@ -24,6 +24,13 @@ The app uses a self-contained .NET 10 WPF executable. You do not need to
 install the .NET runtime separately. Python 3.11 or 3.12 (64-bit) is used by
 the separate local publishing worker. The installer opens the setup terminal
 so dependency checks and any automatic installation are visible.
+
+UNINSTALL
+---------
+Open Start Menu → ScarClipScheduler → Uninstall ScarClipScheduler, or use
+Windows Settings → Apps → Installed apps → ScarClipScheduler → Uninstall.
+The uninstaller removes the installed program files and shortcuts. It keeps
+your user data under %LOCALAPPDATA%\\ScarClipScheduler.
 
 DATA SAFETY
 -----------
