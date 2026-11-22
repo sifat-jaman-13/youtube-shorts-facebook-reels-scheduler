@@ -132,7 +132,7 @@ This checklist helps you prepare your PC before running setup. **It does not rep
 
 - **Operating system:** Windows 10 or Windows 11, 64-bit (x64).
 - **Python:** 64-bit **CPython 3.10 or newer** for the local publishing worker. Setup checks the normal Windows `python` command on PATH with `python --version`. Python 3.10, 3.11, 3.12, 3.14, 3.15 and later compatible versions are accepted. If no compatible command is available, setup attempts to install Python 3.14 through WinGet.
-- **WinGet / App Installer:** needed only when no compatible Python 3.10+ command is available on PATH and setup must install Python automatically. If a compatible `python` command is already available, WinGet is not needed.
+- **WinGet / App Installer:** optional preferred installer when Python is missing. If WinGet is unavailable, setup downloads the latest stable 64-bit CPython installer directly from python.org, verifies its digital signature, and installs it for the current user.
 - **Internet connection:** needed during first setup to install Python packages and later for Google / Meta API communication.
 - **PowerShell:** included with Windows; setup opens it to display prerequisite checks and any automatic installation.
 - **.NET:** no separate .NET runtime installation is required. The distributed WPF app is self-contained.
@@ -163,7 +163,7 @@ python -c "import sys; print(sys.executable); print(sys.implementation.name); pr
 winget --version
 ~~~
 
-If `python --version` is missing or reports an unsupported runtime, setup attempts to install Python 3.14 using WinGet. WinGet is provided by Windows **App Installer**. If App Installer is missing, install it from the Microsoft Store link above and rerun setup.
+If `python --version` is missing or reports an unsupported runtime, setup first tries WinGet to install Python 3.14. If WinGet is not available or its installation fails, setup downloads the latest stable 64-bit Python installer directly from python.org, verifies the Python Software Foundation signature, installs it for the current user, and repeats the PATH check.
 
 ### Extra requirements for developers building from source
 
@@ -186,7 +186,7 @@ dotnet --info
 When you run **ScarClipScheduler-Setup.exe**, it opens a PowerShell setup window and:
 
 1. runs `python --version` using the command resolved from the current Windows PATH, then validates that it is 64-bit CPython 3.10 or newer;
-2. attempts to download and install Python 3.14 through WinGet if the PATH command is missing or unsupported, then repeats the `python --version` check;
+2. attempts to install Python automatically if the PATH command is missing or unsupported: WinGet first, then the official signed python.org installer if WinGet is unavailable or fails; it repeats the `python --version` check after installation;
 3. creates or validates the app's isolated .venv;
 4. checks the installed dependency set against the packaged requirements.txt;
 5. installs or repairs packages only when the environment is new, incomplete, unhealthy, or the requirements have changed;
