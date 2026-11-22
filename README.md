@@ -103,7 +103,7 @@ The **Hide accepted** control hides fully scheduled/published items from the vis
 
 The app keeps separate local locations for scheduled, uploaded, pending and failed work. The **You can delete these clips now** folder is a manual-review area; the app does not automatically delete videos.
 
-## Before you install (Windows)
+## Absolute requirements before installing (Windows)
 
 > These are the real prerequisites for the published Windows ZIP. You do **not** need to install the .NET runtime separately.
 
