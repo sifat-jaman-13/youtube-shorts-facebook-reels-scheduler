@@ -1,5 +1,19 @@
 # ScarClipScheduler
 
+<p align="center">
+  <img src="assets/scarclipscheduler-banner.svg" alt="ScarClipScheduler — Schedule Shorts and Reels with control" width="100%">
+</p>
+<p align="center">
+  <img src="assets/scarclipscheduler-mini-banner.svg" alt="ScarClipScheduler compact banner" width="72%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler?display_name=tag&sort=semver"></a>
+  <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip"><img alt="Windows x64 ZIP" src="https://img.shields.io/badge/download-Windows%20x64-2563eb?logo=windows"></a>
+  <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml"><img alt="Windows build" src="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
+</p>
+
 **Version 2.0.2 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
@@ -88,6 +102,54 @@ The **Hide accepted** control hides fully scheduled/published items from the vis
 **Delete from list** removes selected local queue records and their per-Page job history. It does not delete source MP4/TXT files and does not cancel a post already accepted by YouTube or Meta.
 
 The app keeps separate local locations for scheduled, uploaded, pending and failed work. The **You can delete these clips now** folder is a manual-review area; the app does not automatically delete videos.
+
+## Before you install (Windows)
+
+> These are the real prerequisites for the published Windows ZIP. You do **not** need to install the .NET runtime separately.
+
+### Required for the Windows ZIP installer
+
+- **Operating system:** Windows 10 or Windows 11, 64-bit (x64).
+- **Internet connection:** required for first-time Python dependency installation and YouTube / Meta API communication.
+- **Python:** Python **3.11 or newer**, 64-bit, for the background publishing worker. Setup detects an existing compatible Python; if none is found, it uses WinGet to install Python 3.12.
+- **PowerShell:** included with Windows and used to run `Install-ScarClipScheduler.ps1`.
+- **WinGet / App Installer:** required only when setup needs to install Python automatically.
+- **.NET runtime:** **not required separately**. The distributed WPF application is published as a self-contained .NET 10 Windows x64 executable.
+- **FFmpeg:** not required by ScarClipScheduler.
+
+### Official downloads
+
+| Requirement | Download |
+|---|---|
+| Python for Windows (64-bit) | [python.org — Windows downloads](https://www.python.org/downloads/windows/) |
+| WinGet / App Installer | [Microsoft Store — App Installer](https://apps.microsoft.com/detail/9NBLGGH4NNS1) |
+| .NET 10 SDK (developers building from source only) | [Microsoft — .NET 10 downloads](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) |
+| Git (source checkout only) | [git-scm.com — Windows](https://git-scm.com/download/win) |
+
+### PowerShell: install the Windows worker prerequisite
+
+Run this only if you do not already have Python 3.11+ installed. It matches the package ID used by the setup script.
+
+```powershell
+winget --version
+winget install --id Python.Python.3.12 --exact --source winget --scope user --accept-package-agreements --accept-source-agreements
+py -3.12 --version
+```
+
+If `winget` is not recognized, install or update **App Installer** using the Microsoft Store link above, reopen PowerShell, and retry. Alternatively, install 64-bit Python manually from python.org and reopen PowerShell.
+
+### Extra requirements only for developers
+
+If you are cloning, running, or building the source rather than installing the published ZIP, also install Git and the **.NET 10 SDK**. The .NET SDK is not a prerequisite for normal use of the published Windows ZIP.
+
+```powershell
+winget install --id Git.Git --exact --source winget --accept-package-agreements --accept-source-agreements
+winget install --id Microsoft.DotNet.SDK.10 --exact --source winget --accept-package-agreements --accept-source-agreements
+
+git --version
+dotnet --info
+py -3.12 --version
+```
 
 ## Install and run
 
@@ -204,3 +266,8 @@ Created and maintained by **Sifat Jaman / ScarZero**. Development assistance fro
 - [TikTok — @scarzero13](https://www.tiktok.com/@scarzero13/)
 
 ScarClipScheduler uses the official Google YouTube Data API and Meta Graph API. Platform quotas, permissions, App Review, account eligibility and scheduling restrictions still apply.
+
+
+## License
+
+ScarClipScheduler is open source under the **MIT License**. See the [LICENSE](LICENSE) file for the full terms.
