@@ -1,5 +1,5 @@
 ﻿#define AppName "ScarClipScheduler"
-#define AppVersion "2.0.3"
+#define AppVersion "2.0.4"
 #define AppPublisher "Sifat Jaman / ScarZero"
 #define AppExeName "ScarClipScheduler.exe"
 
@@ -19,7 +19,7 @@ OutputDir=..\dist\installer
 OutputBaseFilename=ScarClipScheduler-Setup
 SetupIconFile=..\assets\scarclipscheduler.ico
 UninstallDisplayIcon={app}\ScarClipScheduler.exe
-VersionInfoVersion=2.0.3.0
+VersionInfoVersion=2.0.4.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription=ScarClipScheduler Windows installer
 VersionInfoProductName={#AppName}
@@ -41,6 +41,7 @@ Source: "..\dist\package\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdi
 
 [Icons]
 Name: "{group}\ScarClipScheduler"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
+Name: "{group}\Uninstall ScarClipScheduler"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\ScarClipScheduler"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
