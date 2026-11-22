@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.6 — Native Windows WPF desktop scheduler**
+**Version 2.0.7 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -131,8 +131,8 @@ This checklist helps you prepare your PC before running setup. **It does not rep
 ### Requirements for normal installation
 
 - **Operating system:** Windows 10 or Windows 11, 64-bit (x64).
-- **Python:** 64-bit Python **3.11 or 3.12** for the local publishing worker. If neither is installed, setup attempts to install Python 3.12 with WinGet.
-- **WinGet / App Installer:** needed only when setup must install Python automatically. If Python is already installed, WinGet is not needed.
+- **Python:** 64-bit **CPython 3.10 or newer** for the local publishing worker. Setup checks the normal Windows `python` command on PATH with `python --version`. Python 3.10, 3.11, 3.12, 3.14, 3.15 and later compatible versions are accepted. If no compatible command is available, setup attempts to install Python 3.14 through WinGet.
+- **WinGet / App Installer:** needed only when no compatible Python 3.10+ command is available on PATH and setup must install Python automatically. If a compatible `python` command is already available, WinGet is not needed.
 - **Internet connection:** needed during first setup to install Python packages and later for Google / Meta API communication.
 - **PowerShell:** included with Windows; setup opens it to display prerequisite checks and any automatic installation.
 - **.NET:** no separate .NET runtime installation is required. The distributed WPF app is self-contained.
@@ -142,7 +142,7 @@ This checklist helps you prepare your PC before running setup. **It does not rep
 
 | Requirement | Download |
 |---|---|
-| Python 3.11 / 3.12 for Windows (64-bit) | [python.org — Windows downloads](https://www.python.org/downloads/windows/) |
+| Python 3.10+ for Windows (64-bit) | [python.org — Windows downloads](https://www.python.org/downloads/windows/) |
 | WinGet / App Installer | [Microsoft Store — App Installer](https://apps.microsoft.com/detail/9NBLGGH4NNS1) |
 | Git (source checkout only) | [git-scm.com — Windows](https://git-scm.com/download/win) |
 | .NET 10 SDK (developers building from source only) | [Microsoft — .NET 10 downloads](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) |
@@ -150,23 +150,20 @@ This checklist helps you prepare your PC before running setup. **It does not rep
 
 ### Check / prepare Python before installation (optional)
 
-You may run these commands before starting the installer. If Python 3.11 or 3.12 is already available, no manual installation is needed.
+You may run these commands before starting the installer. The installer runs the same checks itself. If `python --version` returns a compatible 64-bit CPython 3.10+ version, no manual installation is needed.
 
 ~~~powershell
-# Check WinGet and installed Python versions
+# Check the same command the installer checks
+python --version
+
+# Verify this is 64-bit CPython 3.10+
+python -c "import sys; print(sys.executable); print(sys.implementation.name); print(sys.maxsize > 2**32); assert sys.implementation.name == 'cpython' and sys.version_info >= (3, 10) and sys.maxsize > 2**32"
+
+# Check WinGet (used only if no compatible Python command is available)
 winget --version
-py -0p
-
-# Optional: install Python 3.12 if you prefer to prepare it yourself
-winget install --id Python.Python.3.12 --exact --source winget --scope user --accept-package-agreements --accept-source-agreements
-
-# Verify a supported Python runtime
-py -3.12 --version
-# Or, when Python 3.11 is installed:
-py -3.11 --version
 ~~~
 
-If winget is not recognized and Python is missing, install or update **App Installer** from the Microsoft Store link above. Alternatively, install 64-bit Python 3.11 or 3.12 directly from python.org.
+If `python --version` is missing or reports an unsupported runtime, setup attempts to install Python 3.14 using WinGet. WinGet is provided by Windows **App Installer**. If App Installer is missing, install it from the Microsoft Store link above and rerun setup.
 
 ### Extra requirements for developers building from source
 
@@ -188,8 +185,8 @@ dotnet --info
 
 When you run **ScarClipScheduler-Setup.exe**, it opens a PowerShell setup window and:
 
-1. lists available Python interpreters using the Python launcher, then validates Python 3.11 / 3.12 (64-bit) directly without failing when the other version is absent;
-2. attempts to install Python 3.12 with WinGet if no supported version is found;
+1. runs `python --version` using the command resolved from the current Windows PATH, then validates that it is 64-bit CPython 3.10 or newer;
+2. attempts to download and install Python 3.14 through WinGet if the PATH command is missing or unsupported, then repeats the `python --version` check;
 3. creates or validates the app's isolated .venv;
 4. checks the installed dependency set against the packaged requirements.txt;
 5. installs or repairs packages only when the environment is new, incomplete, unhealthy, or the requirements have changed;
