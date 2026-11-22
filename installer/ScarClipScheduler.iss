@@ -1,5 +1,5 @@
 ﻿#define AppName "ScarClipScheduler"
-#define AppVersion "2.0.4"
+#define AppVersion "2.0.5"
 #define AppPublisher "Sifat Jaman / ScarZero"
 #define AppExeName "ScarClipScheduler.exe"
 
@@ -19,7 +19,7 @@ OutputDir=..\dist\installer
 OutputBaseFilename=ScarClipScheduler-Setup
 SetupIconFile=..\assets\scarclipscheduler.ico
 UninstallDisplayIcon={app}\ScarClipScheduler.exe
-VersionInfoVersion=2.0.4.0
+VersionInfoVersion=2.0.5.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription=ScarClipScheduler Windows installer
 VersionInfoProductName={#AppName}
@@ -44,8 +44,9 @@ Name: "{group}\ScarClipScheduler"; Filename: "{app}\{#AppExeName}"; WorkingDir: 
 Name: "{group}\Uninstall ScarClipScheduler"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\ScarClipScheduler"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
-[Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Install-ScarClipScheduler.ps1"""; WorkingDir: "{app}"; Description: "Check prerequisites and prepare the publishing worker"; StatusMsg: "Checking Python and installing any missing publishing requirements..."; Flags: waituntilterminated
+[Messages]
+FinishedLabel=Setup completed successfully. Click Finish to close Setup. To open ScarClipScheduler, use its Start Menu shortcut.
+FinishedLabelNoIcons=Setup completed successfully. Click Finish to close Setup.
 
 [Code]
 function SchedulerIsRunning(): Boolean;
@@ -85,5 +86,33 @@ begin
     Exit;
   end;
   Result := True;
+end;
+
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+  PowerShellPath: String;
+  ScriptPath: String;
+  Parameters: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    PowerShellPath := ExpandConstant('{sys}\\WindowsPowerShell\\v1.0\\powershell.exe');
+    ScriptPath := ExpandConstant('{app}\\Install-ScarClipScheduler.ps1');
+    Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
+    if not Exec(PowerShellPath, Parameters, ExpandConstant('{app}'),
+      SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+    begin
+      RaiseException('Could not start the prerequisite setup. ' + SysErrorMessage(ResultCode));
+    end;
+    if ResultCode <> 0 then
+    begin
+      RaiseException('ScarClipScheduler prerequisite setup failed (exit code ' +
+        IntToStr(ResultCode) + '). Read the setup log at ' +
+        ExpandConstant('{localappdata}\\ScarClipScheduler\\installer-setup.log') +
+        ' and run the installer again after correcting the reported issue.');
+    end;
+  end;
 end;
 
