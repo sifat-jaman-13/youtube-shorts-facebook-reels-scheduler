@@ -61,6 +61,36 @@ function Invoke-CapturedProcess([string]$FilePath, [string[]]$Arguments = @()) {
     return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout.Result; StdErr = $stderr.Result }
 }
 
+function Invoke-SetupCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @(),
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    # Capture setup output in the transcript and stop on a non-zero exit code.
+    $result = Invoke-CapturedProcess -FilePath $FilePath -Arguments $Arguments
+
+    if (-not [string]::IsNullOrWhiteSpace($result.StdOut)) {
+        Write-Host ($result.StdOut.TrimEnd())
+    }
+    if (-not [string]::IsNullOrWhiteSpace($result.StdErr)) {
+        Write-Host ($result.StdErr.TrimEnd()) -ForegroundColor DarkYellow
+    }
+
+    if ($result.ExitCode -ne 0) {
+        $details = @($result.StdErr, $result.StdOut) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $message = "$FailureMessage (exit code $($result.ExitCode))."
+        if ($details.Count -gt 0) {
+            $message += [Environment]::NewLine + ($details -join [Environment]::NewLine)
+        }
+        throw $message
+    }
+
+    return $result
+}
+
 function Test-SupportedPython([string]$Python) {
     if (-not $Python) { return $false }
     # Validate the interpreter resolved by the active Windows PATH command.
@@ -115,7 +145,7 @@ function Refresh-ProcessPath {
 }
 
 Write-Host ''
-Write-Host 'ScarClipScheduler 2.0.7 - installation checks' -ForegroundColor Cyan
+Write-Host 'ScarClipScheduler 2.0.8 - installation checks' -ForegroundColor Cyan
 Write-Host 'This setup check runs during installation, not when you launch the app.' -ForegroundColor Gray
 Write-Host ''
 

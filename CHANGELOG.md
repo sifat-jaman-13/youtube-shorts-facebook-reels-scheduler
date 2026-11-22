@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.8] - 2026-11-22
+
+### Fixed
+
+- Added the missing checked `Invoke-SetupCommand` helper used by the Windows installer to create the isolated Python environment and install or verify publishing-worker dependencies.
+- Captures and displays command output in the setup transcript and stops installation with the exit code and diagnostic output when a command fails.
+- Added regression coverage confirming the helper is defined before its first use.
+
 ## [2.0.7] - 2026-11-22
 
 ### Fixed
