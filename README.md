@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.14 — Native Windows WPF desktop scheduler**
+**Version 2.0.15 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -82,9 +82,33 @@ The app uploads the videos now and asks the selected platform APIs to publish th
 
 The first unaccepted clip uses the confirmed start time; each following clip uses the selected interval. The app does not silently replace the chosen time after a scan. The first post must be at least 15 minutes ahead of the current local time.
 
-YouTube quota and Facebook's 30-Reels-per-Page-per-24-hours limit can defer remaining work. When YouTube's daily quota is reached, remaining unaccepted YouTube slots are moved to the next quota window. Other rejected destinations are marked Error and assigned a retry slot for tomorrow; use **Reset failed** and start the queue again to retry those destinations. Already accepted platform schedules are never resubmitted.
+YouTube's daily upload quota can defer remaining YouTube work to the next quota window. Facebook uploads are attempted sequentially without an app-imposed per-day cap; the queue keeps going until Meta itself returns an API rejection. A definite Meta API rejection marks only that Page's clip as Failed and moves its publish slot to the immediately following local calendar day. Use **Reset failed** and start the queue again to retry the rejected clip. An ambiguous network outcome stays Partial and is locked against automatic re-upload until you verify it in Meta Business Suite. Already accepted platform schedules are never resubmitted.
 
 The native app's **How to use** page contains a visual filename-pairing example, TXT layout, and step-by-step scanning instructions.
+
+### Upload history and duplicate protection (SQLite)
+
+ScarClipScheduler keeps its publishing history in the local SQLite database:
+
+~~~text
+%LOCALAPPDATA%\ScarClipScheduler\queue.db
+~~~
+
+Version 2.0.15 adds a permanent upload ledger table. Its composite primary key is:
+
+~~~sql
+PRIMARY KEY (video_name, scheduled_at, platform, destination_id)
+~~~
+
+The platform identifies YouTube or Facebook, and the destination ID identifies the connected YouTube channel or Facebook Page. The ledger stores each upload's status, external video/session ID, attempt count, timestamps, and last error.
+
+Each MP4 is also fingerprinted with SHA-256. A unique database index blocks the same file content from being claimed a second time for the same platform destination, even when the filename, source path, or scheduled time changes. Different Facebook Pages and a YouTube channel are separate destinations and therefore keep separate upload receipts.
+
+Before sending an upload request, the worker atomically claims the ledger row as Uploading. Facebook's session ID is saved at the START stage, Uploaded is saved after the binary transfer, and Scheduled is saved only after the final scheduling request is accepted. YouTube is marked Scheduled when its upload API returns the accepted video ID.
+
+When an upload fails with a definite platform rejection, it is marked Failed; **Reset failed** changes only those definite failures to retryable. An interrupted or ambiguous request becomes Partial (or remains Uploaded when the binary transfer was confirmed). Those states are intentionally not reset by **Reset failed**. Check YouTube Studio or Meta Business Suite before taking any further action; this is how the app avoids blindly sending a video again after an uncertain network response.
+
+On first startup of 2.0.15, the app backs up the existing queue database to a backups folder next to it and migrates known YouTube video IDs and Facebook Page Reel IDs into the new ledger. Existing queue entries and per-Page history are preserved.
 
 ## Connections
 
@@ -118,11 +142,16 @@ The first non-empty TXT line becomes the video title. The remaining lines become
 
 ## Queue statuses and file handling
 
-- **Pending:** no destination has accepted the post yet.
-- **Partial:** at least one selected destination accepted the post, while another selected destination is still pending or failed.
-- **Scheduled:** the selected destinations have accepted the scheduled posts.
-- **Failed / Skipped:** review the Activity log and platform response before retrying.
-- **Uploaded:** the platform accepted an upload, but the scheduled publication has not yet been confirmed.
+- **Pending:** the selected destination has not started an upload.
+- **Uploading:** an upload request is in progress.
+- **Partial:** the upload stopped in an uncertain state, or a destination may have received the video without a confirmed final response. This state is locked against automatic re-upload.
+- **Uploaded:** Facebook has accepted the binary upload stage, but the final scheduling request has not yet been confirmed. This state is locked against automatic re-upload.
+- **Scheduled:** the destination has accepted the scheduled post.
+- **Published:** publication was verified through the platform API.
+- **Failed:** the platform returned a definite rejection before accepting the video. Review the Activity log, then use **Reset failed** when you are ready to retry.
+- **Skipped:** the destination was skipped, for example because the clip failed the Facebook Reel format check.
+
+The visible overall status is **Partial** when the selected destinations do not all share the same successful state. The YouTube and Facebook status columns still show each platform's own state.
 
 The **Hide accepted** control hides fully scheduled/published items from the visible list. It does not delete them from the database.
 

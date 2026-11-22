@@ -42,7 +42,7 @@ public partial class MainWindow : Window
         var appIcon = Path.Combine(AppContext.BaseDirectory, "backend", "assets", "scarclipscheduler.ico");
         if (File.Exists(appIcon))
             Icon = BitmapFrame.Create(new Uri(appIcon, UriKind.Absolute));
-        Title = "ScarClipScheduler 2.0.14";
+        Title = "ScarClipScheduler 2.0.15";
         DataContext = this;
         ClipGrid.ItemsSource = Clips;
         StartDate.DisplayDateStart = DateTime.Today;
@@ -324,23 +324,25 @@ public partial class MainWindow : Window
     }
 
     private static bool IsFullyAccepted(string status) =>
-        string.Equals(status, "✓ Scheduled", StringComparison.Ordinal) ||
-        string.Equals(status, "✓ Published", StringComparison.Ordinal);
+        string.Equals(status, "Scheduled", StringComparison.Ordinal) ||
+        string.Equals(status, "Published", StringComparison.Ordinal);
 
     private void UpdateSummary(NativeState state)
     {
         int Count(string key) => state.Counts.TryGetValue(key, out var value) ? value : 0;
-        var accepted = Count("✓ Scheduled") + Count("✓ Published");
+        var accepted = Count("Scheduled") + Count("Published");
         var pending = Count("Pending") + Count("Choose platform");
-        var failed = Count("⚠ Failed") + Count("⚠ Skipped");
-        var partial = Count("◐ Partial");
-        var uploaded = Count("↑ Uploaded");
+        var uploading = Count("Uploading");
+        var failed = Count("Failed") + Count("Skipped");
+        var partial = Count("Partial");
+        var uploaded = Count("Uploaded");
         var visible = _showAllAccepted ? state.Total : Math.Max(0, state.Total - accepted);
         QueueSummary.Text =
             $"{state.Total} clips  |  {visible} visible  |  {pending} pending  |  " +
-            $"{partial} partial  |  {accepted} scheduled/published  |  {uploaded} uploaded  |  {failed} failed";
+            $"{uploading} uploading  |  {partial} partial  |  {uploaded} uploaded  |  " +
+            $"{accepted} scheduled/published  |  {failed} failed";
         FooterStatus.Text = state.Busy
-            ? $"Background task active — queue: {(state.QueueRunning ? "running" : "idle")}, " +
+            ? $"Background task active - queue: {(state.QueueRunning ? "running" : "idle")}, " +
               $"scan: {(state.ScanRunning ? "running" : "idle")}, verify: {(state.VerificationRunning ? "running" : "idle")}."
             : "Ready. No background operation is currently running.";
     }
@@ -909,7 +911,7 @@ public partial class MainWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.14  |  Native Windows application",
+            Text = "Version 2.0.15  |  Native Windows application",
             FontSize = 12,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(154, 168, 196)),
             Margin = new Thickness(0, 0, 0, 14)

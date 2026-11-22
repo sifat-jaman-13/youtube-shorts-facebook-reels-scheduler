@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.0.15] - 2026-11-22
+
+### Added
+
+- Added a durable SQLite upload ledger with composite primary key (video_name, scheduled_at, platform, destination_id).
+- Added streaming SHA-256 fingerprints and unique indexes to prevent the same video content from being uploaded twice to the same YouTube channel or Facebook Page, even if its filename or schedule time changes.
+- Added atomic upload claims and durable upload receipts containing stage, external video/session ID, attempt count, timestamps and last error.
+- Added explicit queue states: Pending, Uploading, Partial, Uploaded, Scheduled, Published, Failed and Skipped.
+- Added a pre-migration SQLite backup and migration of existing YouTube video IDs and Facebook Page Reel IDs into the new ledger.
+- Added regression tests for duplicate content under renamed files, changed scheduled times, destination isolation, failed retry and legacy receipt migration.
+
+### Fixed
+
+- Facebook upload progress is committed after START and after the binary upload, before the final scheduling request.
+- Ambiguous upload/network outcomes are marked Partial and are not reset by Reset failed, preventing a blind second upload.
+- Reset failed now retries only definite platform failures; Partial, Uploaded, Scheduled and Published receipts remain protected.
+- Per-Page status aggregation now exposes Uploading, Uploaded, Partial, Failed, Scheduled and Published states accurately in the queue.
+- Verified publication results update both the visible queue status and the permanent upload ledger.
+- Removed the artificial Facebook 30-Reels-per-24-hours local throttle. The queue continues submitting Page uploads until Meta returns an actual API rejection.
+- A definite Meta API rejection moves that clip's Facebook publish slot to the immediately following local calendar day, regardless of its previous future-dated slot.
+
 ## [2.0.14] - 2026-11-22
 
 ### Added

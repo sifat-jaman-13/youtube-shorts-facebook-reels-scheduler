@@ -74,9 +74,14 @@ class SchedulerRegressionTests(unittest.TestCase):
         core_source = (project / "app.py").read_text(encoding="utf-8")
         self.assertIn("Your chosen start time is unchanged", core_source)
         self.assertNotIn('self.root.after(0, lambda: self.start_var.set(recommended.strftime', core_source)
-        self.assertIn("unaccepted YouTube ", core_source)
-        self.assertIn("next available quota windows", core_source)
-        self.assertIn("Retry slot reserved for", core_source)
+        self.assertIn("Remaining unaccepted clips were shifted", core_source)
+        self.assertIn("into the next quota windows", core_source)
+        self.assertIn("upload_ledger", core_source)
+        self.assertIn("PRIMARY KEY (video_name, scheduled_at, platform, destination_id)", core_source)
+        self.assertIn("content_sha256", core_source)
+        self.assertIn("claim_platform_upload", core_source)
+        self.assertIn("on_session=", core_source)
+        self.assertIn("Retry slot moved to the next calendar day", core_source)
         self.assertIn("allocation_rows.append(allocation_row)", core_source)
         self.assertIn("sequence = 0", core_source)
         self.assertIn("slot = start + timedelta(minutes=sequence * interval)", core_source)
@@ -469,19 +474,19 @@ class SchedulerRegressionTests(unittest.TestCase):
         pages = [{"id": "page-a"}, {"id": "page-b"}]
         self.assertEqual(
             app.SchedulerApp.get_queue_row_status(row, page_jobs, pages, True, True),
-            "◐ Partial"
+            "Partial"
         )
         page_jobs[("clip.mp4", "page-b")]["status"] = "Scheduled"
         self.assertEqual(
             app.SchedulerApp.get_queue_row_status(row, page_jobs, pages, True, True),
-            "✓ Scheduled"
+            "Scheduled"
         )
         row["yt_status"] = "Published"
         page_jobs[("clip.mp4", "page-a")]["status"] = "Published"
         page_jobs[("clip.mp4", "page-b")]["status"] = "Published"
         self.assertEqual(
             app.SchedulerApp.get_queue_row_status(row, page_jobs, pages, True, True),
-            "✓ Published"
+            "Published"
         )
 
     def test_queue_status_marks_any_failed_destination_failed(self):
@@ -491,7 +496,7 @@ class SchedulerRegressionTests(unittest.TestCase):
             app.SchedulerApp.get_queue_row_status(
                 row, jobs, [{"id": "page-a"}], True, True
             ),
-            "⚠ Failed"
+            "Failed"
         )
 
     def test_safe_cleanup_gate_requires_every_recorded_destination_published(self):
@@ -893,6 +898,406 @@ class SchedulerRegressionTests(unittest.TestCase):
 
 
 
+
+
+
+
+class FacebookNoArtificialCapTests(unittest.TestCase):
+    def test_explicit_meta_4xx_is_definitive_before_or_after_a_session(self):
+        self.assertTrue(app.is_definitive_facebook_rejection(
+            "Facebook Graph API error (HTTP 400): daily limit reached",
+            has_remote_session=False
+        ))
+        self.assertTrue(app.is_definitive_facebook_rejection(
+            "Facebook Graph API error (HTTP 429): rate limit reached",
+            has_remote_session=False
+        ))
+        self.assertTrue(app.is_definitive_facebook_rejection(
+            "Facebook Graph API error (HTTP 400): finish rejected",
+            has_remote_session=True
+        ))
+        self.assertTrue(app.is_definitive_facebook_rejection(
+            "Facebook Graph API error (HTTP 403): binary upload rejected",
+            has_remote_session=True
+        ))
+        self.assertTrue(app.is_definitive_facebook_rejection(
+            "Facebook binary upload failed: {'success': False}",
+            has_remote_session=True
+        ))
+        self.assertTrue(app.is_definitive_facebook_rejection(
+            "Facebook did not accept the scheduled Reel: {'success': False}",
+            has_remote_session=True
+        ))
+        self.assertFalse(app.is_definitive_facebook_rejection(
+            "Facebook Graph API error (HTTP 408): request timed out",
+            has_remote_session=True
+        ))
+        self.assertFalse(app.is_definitive_facebook_rejection(
+            "Facebook Graph API error (HTTP 500): server error",
+            has_remote_session=False
+        ))
+        self.assertFalse(app.is_definitive_facebook_rejection(
+            "Connection timed out",
+            has_remote_session=False
+        ))
+
+    def test_queue_does_not_pause_after_a_locally_counted_thirty_reels(self):
+        project = Path(app.__file__).resolve().parent
+        source = (project / "app.py").read_text(encoding="utf-8")
+        self.assertNotIn("wait_for_fb_api_slot", source)
+        self.assertNotIn("30-Reels-per-24h", source)
+        self.assertNotIn("at most 30 API Reels", source)
+        self.assertIn("Facebook uploads continue until Meta returns an actual API rejection.", source)
+
+    def test_meta_rejection_retry_slot_is_the_immediate_next_local_day(self):
+        rejected_at = datetime(2026, 11, 22, 16, 35, tzinfo=app.local_now().tzinfo)
+        retry_at = app.next_day_retry_time(rejected_at)
+        self.assertEqual(retry_at.date(), rejected_at.date() + timedelta(days=1))
+        self.assertEqual(retry_at.hour, rejected_at.hour)
+        self.assertEqual(retry_at.minute, rejected_at.minute + 15)
+
+    def test_far_future_original_publish_time_does_not_delay_meta_retry(self):
+        rejected_at = datetime(2026, 11, 22, 16, 35, tzinfo=app.local_now().tzinfo)
+        original_publish = rejected_at + timedelta(days=10)
+        retry_at = app.next_day_retry_time(rejected_at)
+        self.assertEqual(retry_at.date(), rejected_at.date() + timedelta(days=1))
+        self.assertLess(retry_at, original_publish)
+
+    def test_meta_rejection_is_definitive_but_network_timeout_remains_partial(self):
+        project = Path(app.__file__).resolve().parent
+        source = (project / "app.py").read_text(encoding="utf-8")
+        self.assertIn("is_definitive_facebook_rejection(", source)
+        self.assertIn('receipt_state = "Failed" if definitely_rejected else "Partial"', source)
+        self.assertIn("retry_at = next_day_retry_time()", source)
+
+
+class UploadLedgerRegressionTests(unittest.TestCase):
+    def _backend(self, database_path, credentials_path):
+        backend = app.SchedulerApp.__new__(app.SchedulerApp)
+        backend.db_lock = threading.Lock()
+        backend.conn = sqlite3.connect(str(database_path), check_same_thread=False, timeout=30)
+        backend.conn.row_factory = sqlite3.Row
+        backend.secrets = {"yt_channel_id": "youtube-channel-1"}
+        backend.settings = {"interval": 5}
+        backend.log = Mock()
+        backend.refresh_table = Mock()
+        with patch.object(app, "CREDENTIALS_PATH", credentials_path):
+            app.SchedulerApp.create_db(backend)
+        return backend
+
+    def _add_clip(self, backend, path, content_hash=None, status="Pending"):
+        backend.db_execute(
+            "INSERT INTO clips(path,title,description,yt_status,content_sha256) VALUES(?,?,?,?,?)",
+            (str(path), Path(path).stem, "", status, content_hash)
+        )
+
+    def test_ledger_primary_key_and_hash_prevent_same_video_reupload_after_rename_or_reschedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "queue.db"
+            credentials = root / "credentials.json"
+            credentials.write_text('{"yt_channel_id":"youtube-channel-1"}', encoding="utf-8")
+            first = root / "first-name.mp4"
+            second = root / "renamed-copy.mp4"
+            payload = b"same video bytes for the SHA-256 duplicate protection test"
+            first.write_bytes(payload)
+            second.write_bytes(payload)
+            digest = app.sha256_file(first)
+            backend = self._backend(database, credentials)
+            self._add_clip(backend, first, digest)
+            self._add_clip(backend, second, digest)
+
+            first_time = "2026-12-01T09:00:00+06:00"
+            second_time = "2026-12-02T09:00:00+06:00"
+            backend.record_scheduled_upload(first, "youtube", "youtube-channel-1", first_time)
+            claimed, previous = backend.claim_platform_upload(
+                first, "youtube", "youtube-channel-1", first_time
+            )
+            self.assertTrue(claimed)
+            self.assertIsNone(previous)
+            backend.set_upload_receipt_state(
+                first, "youtube", "youtube-channel-1", first_time,
+                "Scheduled", external_id="youtube-video-123"
+            )
+
+            # A second filename and a different posting date still identify the same bytes.
+            backend.record_scheduled_upload(second, "youtube", "youtube-channel-1", second_time)
+            claimed, previous = backend.claim_platform_upload(
+                second, "youtube", "youtube-channel-1", second_time
+            )
+            self.assertFalse(claimed)
+            self.assertEqual(previous["status"], "Scheduled")
+            self.assertEqual(previous["external_id"], "youtube-video-123")
+            duplicate = backend.conn.execute(
+                "SELECT status,external_id FROM upload_ledger "
+                "WHERE video_name=? AND scheduled_at=? AND platform='youtube'",
+                (second.name, second_time)
+            ).fetchone()
+            self.assertEqual(duplicate["status"], "Duplicate blocked")
+            self.assertEqual(duplicate["external_id"], "youtube-video-123")
+            self.assertEqual(
+                backend.conn.execute("SELECT yt_status FROM clips WHERE path=?", (str(second),)).fetchone()[0],
+                "Scheduled"
+            )
+
+            # Even the original source cannot be claimed at a third schedule time.
+            third_time = "2026-12-03T09:00:00+06:00"
+            backend.record_scheduled_upload(first, "youtube", "youtube-channel-1", third_time)
+            claimed, previous = backend.claim_platform_upload(
+                first, "youtube", "youtube-channel-1", third_time
+            )
+            self.assertFalse(claimed)
+            self.assertEqual(previous["external_id"], "youtube-video-123")
+
+            pk = {
+                row["name"]: row["pk"]
+                for row in backend.conn.execute("PRAGMA table_info(upload_ledger)")
+            }
+            self.assertEqual(
+                [name for name, position in sorted(pk.items(), key=lambda item: item[1]) if position],
+                ["video_name", "scheduled_at", "platform", "destination_id"]
+            )
+            backend.conn.close()
+
+    def test_receipts_are_scoped_by_platform_and_destination_page(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "queue.db"
+            credentials = root / "credentials.json"
+            credentials.write_text('{"yt_channel_id":"youtube-channel-1"}', encoding="utf-8")
+            clip = root / "same-video.mp4"
+            duplicate = root / "same-video-copy.mp4"
+            clip.write_bytes(b"cross-platform destination test")
+            duplicate.write_bytes(clip.read_bytes())
+            digest = app.sha256_file(clip)
+            backend = self._backend(database, credentials)
+            self._add_clip(backend, clip, digest)
+            self._add_clip(backend, duplicate, digest)
+
+            time_one = "2026-12-01T10:00:00+06:00"
+            time_two = "2026-12-01T10:05:00+06:00"
+            backend.record_scheduled_upload(clip, "facebook", "page-a", time_one)
+            allowed, _ = backend.claim_platform_upload(clip, "facebook", "page-a", time_one)
+            self.assertTrue(allowed)
+            backend.set_upload_receipt_state(
+                clip, "facebook", "page-a", time_one, "Uploaded",
+                external_id="fb-session-a", uploaded=True
+            )
+
+            # The same video must not be uploaded again to Page A, even under a new name.
+            backend.record_scheduled_upload(duplicate, "facebook", "page-a", time_two)
+            allowed, previous = backend.claim_platform_upload(duplicate, "facebook", "page-a", time_two)
+            self.assertFalse(allowed)
+            self.assertEqual(previous["status"], "Uploaded")
+            self.assertEqual(previous["external_id"], "fb-session-a")
+
+            # YouTube and another Facebook Page are independent destinations.
+            backend.record_scheduled_upload(clip, "youtube", "youtube-channel-1", time_one)
+            allowed, _ = backend.claim_platform_upload(clip, "youtube", "youtube-channel-1", time_one)
+            self.assertTrue(allowed)
+            backend.record_scheduled_upload(clip, "facebook", "page-b", time_one)
+            allowed, _ = backend.claim_platform_upload(clip, "facebook", "page-b", time_one)
+            self.assertTrue(allowed)
+            backend.conn.close()
+
+    def test_partial_and_uploaded_receipts_are_not_unlocked_by_reset_failed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "queue.db"
+            credentials = root / "credentials.json"
+            credentials.write_text('{"yt_channel_id":"youtube-channel-1"}', encoding="utf-8")
+            clip = root / "uncertain.mp4"
+            clip.write_bytes(b"uncertain upload result")
+            digest = app.sha256_file(clip)
+            backend = self._backend(database, credentials)
+            self._add_clip(backend, clip, digest)
+            scheduled_at = "2026-12-01T11:00:00+06:00"
+            backend.record_scheduled_upload(clip, "youtube", "youtube-channel-1", scheduled_at)
+            allowed, _ = backend.claim_platform_upload(clip, "youtube", "youtube-channel-1", scheduled_at)
+            self.assertTrue(allowed)
+            backend.set_upload_receipt_state(
+                clip, "youtube", "youtube-channel-1", scheduled_at,
+                "Partial", error="Network dropped after upload request."
+            )
+
+            app.SchedulerApp.reset_failed(backend)
+            receipt = backend.get_platform_receipt(
+                clip, "youtube", "youtube-channel-1", scheduled_at
+            )
+            self.assertEqual(receipt["status"], "Partial")
+            allowed, previous = backend.claim_platform_upload(
+                clip, "youtube", "youtube-channel-1", "2026-12-02T11:00:00+06:00"
+            )
+            self.assertFalse(allowed)
+            self.assertEqual(previous["status"], "Partial")
+            backend.conn.close()
+
+    def test_confirmed_failure_can_be_explicitly_reset_and_retried(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "queue.db"
+            credentials = root / "credentials.json"
+            credentials.write_text('{"yt_channel_id":"youtube-channel-1"}', encoding="utf-8")
+            clip = root / "rejected.mp4"
+            clip.write_bytes(b"confirmed rejection is safe to retry")
+            digest = app.sha256_file(clip)
+            backend = self._backend(database, credentials)
+            self._add_clip(backend, clip, digest)
+            scheduled_at = "2026-12-01T12:00:00+06:00"
+            backend.record_scheduled_upload(clip, "youtube", "youtube-channel-1", scheduled_at)
+            allowed, _ = backend.claim_platform_upload(clip, "youtube", "youtube-channel-1", scheduled_at)
+            self.assertTrue(allowed)
+            backend.set_upload_receipt_state(
+                clip, "youtube", "youtube-channel-1", scheduled_at,
+                "Failed", error="Platform returned a definite HTTP 400 rejection."
+            )
+            app.SchedulerApp.reset_failed(backend)
+            receipt = backend.get_platform_receipt(
+                clip, "youtube", "youtube-channel-1", scheduled_at
+            )
+            self.assertEqual(receipt["status"], "Retryable")
+            allowed, _ = backend.claim_platform_upload(
+                clip, "youtube", "youtube-channel-1", scheduled_at
+            )
+            self.assertTrue(allowed)
+            attempts = backend.conn.execute(
+                "SELECT attempt_count FROM upload_ledger WHERE video_name=? AND scheduled_at=? "
+                "AND platform='youtube' AND destination_id='youtube-channel-1'",
+                (clip.name, scheduled_at)
+            ).fetchone()[0]
+            self.assertEqual(attempts, 2)
+            backend.conn.close()
+
+    def test_meta_rejection_retains_failed_receipt_and_allows_next_day_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "queue.db"
+            credentials = root / "credentials.json"
+            credentials.write_text('{"yt_channel_id":"youtube-channel-1"}', encoding="utf-8")
+            clip = root / "meta-rejected.mp4"
+            clip.write_bytes(b"Meta definitively rejected this upload session")
+            digest = app.sha256_file(clip)
+            backend = self._backend(database, credentials)
+            self._add_clip(backend, clip, digest)
+            rejected_at = datetime(2026, 11, 22, 16, 35, tzinfo=app.local_now().tzinfo)
+            original_slot = rejected_at.isoformat()
+            retry_slot = app.next_day_retry_time(rejected_at).isoformat()
+
+            backend.record_scheduled_upload(clip, "facebook", "page-123", original_slot)
+            allowed, _ = backend.claim_platform_upload(
+                clip, "facebook", "page-123", original_slot
+            )
+            self.assertTrue(allowed)
+            backend.set_upload_receipt_state(
+                clip, "facebook", "page-123", original_slot, "Failed",
+                external_id="meta-session-123",
+                error="Facebook Graph API error (HTTP 403): Reel rejected"
+            )
+            backend.record_scheduled_upload(
+                clip, "facebook", "page-123", retry_slot
+            )
+            app.SchedulerApp.reset_failed(backend)
+
+            original_receipt = backend.get_platform_receipt(
+                clip, "facebook", "page-123", original_slot
+            )
+            retry_receipt = backend.get_platform_receipt(
+                clip, "facebook", "page-123", retry_slot
+            )
+            self.assertEqual(original_receipt["status"], "Retryable")
+            self.assertEqual(original_receipt["external_id"], "meta-session-123")
+            self.assertEqual(retry_receipt["status"], "Pending")
+
+            allowed, _ = backend.claim_platform_upload(
+                clip, "facebook", "page-123", retry_slot
+            )
+            self.assertTrue(allowed)
+            receipts = backend.conn.execute(
+                "SELECT scheduled_at,status FROM upload_ledger "
+                "WHERE video_name=? AND platform='facebook' AND destination_id='page-123' "
+                "ORDER BY scheduled_at",
+                (clip.name,)
+            ).fetchall()
+            self.assertEqual(len(receipts), 2)
+            self.assertEqual(receipts[0]["status"], "Retryable")
+            self.assertEqual(receipts[1]["status"], "Uploading")
+            backend.conn.close()
+
+    def test_migration_imports_legacy_youtube_and_facebook_ids_and_keeps_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "queue.db"
+            credentials = root / "credentials.json"
+            credentials.write_text('{"yt_channel_id":"legacy-channel"}', encoding="utf-8")
+            old = sqlite3.connect(database)
+            old.execute("""
+                CREATE TABLE clips (
+                    path TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL,
+                    width INTEGER, height INTEGER, duration REAL, fb_ok INTEGER, publish_at TEXT,
+                    yt_status TEXT NOT NULL DEFAULT 'Pending', fb_status TEXT NOT NULL DEFAULT 'Pending',
+                    yt_video_id TEXT, fb_video_id TEXT, yt_error TEXT, fb_error TEXT, modified REAL
+                )
+            """)
+            old.execute("""
+                CREATE TABLE facebook_page_jobs (
+                    path TEXT NOT NULL, page_id TEXT NOT NULL, page_name TEXT NOT NULL,
+                    publish_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Pending',
+                    video_id TEXT, error TEXT, submitted_at TEXT,
+                    PRIMARY KEY(path,page_id)
+                )
+            """)
+            old.execute(
+                "INSERT INTO clips(path,title,description,publish_at,yt_status,yt_video_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (str(root / "legacy.mp4"), "Legacy", "", "2026-12-01T09:00:00+06:00",
+                 "Scheduled", "legacy-yt-id")
+            )
+            old.execute(
+                "INSERT INTO facebook_page_jobs(path,page_id,page_name,publish_at,status,video_id,submitted_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (str(root / "legacy.mp4"), "legacy-page", "Legacy Page",
+                 "2026-12-01T09:00:00+06:00", "Scheduled", "legacy-fb-id",
+                 "2026-11-22T10:00:00+06:00")
+            )
+            old.commit()
+            old.close()
+
+            backend = app.SchedulerApp.__new__(app.SchedulerApp)
+            backend.conn = sqlite3.connect(str(database), check_same_thread=False)
+            backend.conn.row_factory = sqlite3.Row
+            backend.db_lock = threading.Lock()
+            backend.secrets = {"yt_channel_id": "legacy-channel"}
+            with patch.object(app, "CREDENTIALS_PATH", credentials):
+                app.SchedulerApp.create_db(backend)
+
+            rows = backend.conn.execute(
+                "SELECT platform,status,external_id,video_name FROM upload_ledger ORDER BY platform"
+            ).fetchall()
+            self.assertEqual(len(rows), 2)
+            by_platform = {row["platform"]: dict(row) for row in rows}
+            self.assertEqual(by_platform["youtube"]["external_id"], "legacy-yt-id")
+            self.assertEqual(by_platform["facebook"]["external_id"], "legacy-fb-id")
+            self.assertEqual(by_platform["youtube"]["status"], "Scheduled")
+            self.assertTrue((root / "backups").is_dir())
+            self.assertEqual(backend.conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            backend.conn.close()
+
+    def test_visible_queue_status_includes_all_upload_stages(self):
+        expected = {
+            "Pending": "Pending",
+            "Uploading": "Uploading",
+            "Partial": "Partial",
+            "Uploaded": "Uploaded",
+            "Scheduled": "Scheduled",
+            "Published": "Published",
+            "Failed": "Failed",
+            "Skipped (format)": "Skipped",
+        }
+        for platform_status, visible_status in expected.items():
+            with self.subTest(platform_status=platform_status):
+                row = {"path": "clip.mp4", "yt_status": platform_status}
+                result = app.SchedulerApp.get_queue_row_status(row, {}, [], True, False)
+                self.assertEqual(result, visible_status)
 
 
 class FutureScheduleValidationTests(unittest.TestCase):

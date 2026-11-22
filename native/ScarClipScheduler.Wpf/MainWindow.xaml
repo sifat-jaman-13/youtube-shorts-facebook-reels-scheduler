@@ -304,7 +304,7 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="5,0,5,5">
                         <Separator Background="#293653" Margin="0,10"/>
                         <TextBlock Text="NATIVE WINDOWS UI" Foreground="#9AA8C4" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock Text=".NET 10 WPF | Version 2.0.14" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
+                        <TextBlock Text=".NET 10 WPF | Version 2.0.15" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
                         <TextBlock Text="API worker runs separately." Foreground="#73829F" FontSize="10" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>
@@ -658,7 +658,7 @@
                                            TextWrapping="Wrap" Foreground="#DCE5F8"/>
                                 <TextBlock Text="Click Confirm start time. The app validates and saves the selected start time and interval. If you edit the date, time, or interval afterwards, the confirmation is cleared and you must confirm again."
                                            TextWrapping="Wrap" Foreground="#A7F3D0" Margin="0,6,0,0"/>
-                                <TextBlock Text="The first clip uses the confirmed start time. Each following clip uses the confirmed interval. YouTube quota and Facebook's per-Page 30-Reels-per-24-hours limit can defer remaining work to a later eligible window; the app shows those deferrals in the Activity log."
+                                <TextBlock Text="The first clip uses the confirmed start time. Each following clip uses the confirmed interval. YouTube quota can defer remaining work to a later quota window. Facebook uploads continue until Meta returns an actual API rejection; rejected clips move to the next local calendar day."
                                            TextWrapping="Wrap" Foreground="#9AA8C4" Margin="0,6,0,0"/>
                             </StackPanel>
                         </GroupBox>

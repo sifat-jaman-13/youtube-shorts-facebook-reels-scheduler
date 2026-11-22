@@ -1,4 +1,4 @@
-ScarClipScheduler 2.0.11 — Windows installer
+ScarClipScheduler 2.0.15 â€” Windows installer
 ============================================
 
 1. Download and run ScarClipScheduler-Setup.exe.
@@ -31,8 +31,8 @@ you press Enter, and the full diagnostic transcript is saved to:
 
 UNINSTALL
 ---------
-Open Start Menu → ScarClipScheduler → Uninstall ScarClipScheduler, or use
-Windows Settings → Apps → Installed apps → ScarClipScheduler → Uninstall.
+Open Start Menu â†’ ScarClipScheduler â†’ Uninstall ScarClipScheduler, or use
+Windows Settings â†’ Apps â†’ Installed apps â†’ ScarClipScheduler â†’ Uninstall.
 The uninstaller removes the installed program files and shortcuts. It keeps
 your user data under %LOCALAPPDATA%\ScarClipScheduler.
 

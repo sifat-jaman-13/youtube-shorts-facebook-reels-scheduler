@@ -10,6 +10,7 @@ import shutil
 import secrets
 import webbrowser
 import logging
+import hashlib
 from pathlib import Path
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -21,8 +22,10 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "2.0.14"
+APP_VERSION = "2.0.15"
 MAX_INTERVAL_MINUTES = 24 * 60
+UPLOAD_PROTECTED_STATES = ("Uploading", "Partial", "Uploaded", "Scheduled", "Published", "Unknown", "Duplicate blocked")
+UPLOAD_RETRYABLE_STATES = ("Failed", "Retryable")
 APP_DIR = Path(__file__).resolve().parent
 ASSET_DIR = APP_DIR / "assets"
 APP_LOGO_PATH = ASSET_DIR / "scarclipscheduler-logo.png"
@@ -61,6 +64,18 @@ def read_json(path, default):
 
 def write_json(path, data):
     Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def sha256_file(video_path, chunk_size=4 * 1024 * 1024):
+    """Return a stable SHA-256 fingerprint without loading the MP4 into memory."""
+    digest = hashlib.sha256()
+    with open(video_path, "rb") as stream:
+        while True:
+            chunk = stream.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def clip_sidecar_path(video_path):
@@ -137,6 +152,37 @@ def validate_interval_minutes(value):
     if not 5 <= interval <= MAX_INTERVAL_MINUTES:
         raise ValueError(f"Interval must be between 5 minutes and {MAX_INTERVAL_MINUTES} minutes (24 hours).")
     return interval
+
+
+def is_definitive_facebook_rejection(error, has_remote_session=False):
+    """Identify explicit Meta rejection responses, even after a session ID exists.
+
+    A connection timeout or server-side 5xx is not proof of rejection: Meta may
+    already have received the media. Explicit Graph API 4xx responses (except
+    HTTP 408) and explicit success=False phase responses are safe to retry on
+    the next local calendar day.
+    """
+    message = str(error)
+    graph_rejection = (
+        "Facebook Graph API error" in message
+        and any(
+            f"(HTTP {code})" in message
+            for code in (*range(400, 408), *range(409, 500))
+        )
+    )
+    explicit_phase_rejection = (
+        "Facebook binary upload failed:" in message
+        or "Facebook did not accept the scheduled Reel:" in message
+    )
+    return graph_rejection or explicit_phase_rejection
+
+
+def next_day_retry_time(moment=None):
+    """Return a retry slot on the immediately following local calendar day."""
+    moment = moment or local_now()
+    if moment.tzinfo is None:
+        moment = moment.astimezone()
+    return moment + timedelta(days=1, minutes=15)
 
 
 def next_pacific_midnight(moment=None):
@@ -343,6 +389,25 @@ class SchedulerApp:
 
     def create_db(self):
         with self.db_lock:
+            # A real on-disk queue receives an online SQLite backup before the
+            # permanent upload ledger is created or any legacy rows are migrated.
+            database_path = self.conn.execute("PRAGMA database_list").fetchone()[2]
+            database_file = Path(database_path) if database_path else None
+            ledger_exists = self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_ledger'"
+            ).fetchone()
+            if database_file and database_file.is_file() and not ledger_exists:
+                backup_dir = database_file.parent / "backups"
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                backup_path = backup_dir / f"queue-before-upload-ledger-{datetime.now():%Y%m%d-%H%M%S}.sqlite3"
+                if not backup_path.exists():
+                    backup_conn = sqlite3.connect(str(backup_path))
+                    try:
+                        self.conn.backup(backup_conn)
+                    finally:
+                        backup_conn.close()
+                    logger.info("Queue database safety backup created: %s", backup_path)
+
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS clips (
                     path TEXT PRIMARY KEY,
@@ -359,9 +424,16 @@ class SchedulerApp:
                     fb_video_id TEXT,
                     yt_error TEXT,
                     fb_error TEXT,
-                    modified REAL
+                    modified REAL,
+                    content_sha256 TEXT
                 )
             """)
+            clip_columns = {
+                row[1] for row in self.conn.execute("PRAGMA table_info(clips)").fetchall()
+            }
+            if "content_sha256" not in clip_columns:
+                self.conn.execute("ALTER TABLE clips ADD COLUMN content_sha256 TEXT")
+
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS facebook_page_jobs (
                     path TEXT NOT NULL,
@@ -375,12 +447,577 @@ class SchedulerApp:
                     PRIMARY KEY (path, page_id)
                 )
             """)
-            columns = {
+            fb_columns = {
                 row[1] for row in self.conn.execute("PRAGMA table_info(facebook_page_jobs)").fetchall()
             }
-            if "submitted_at" not in columns:
+            if "submitted_at" not in fb_columns:
                 self.conn.execute("ALTER TABLE facebook_page_jobs ADD COLUMN submitted_at TEXT")
+
+            # Composite primary key: clip filename + scheduled time, with platform
+            # and destination included so the same clip/time can target several services.
+            # content_sha256 is the immutable identity used to block re-uploads even
+            # when someone changes the filename or chooses a different posting time.
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS upload_ledger (
+                    video_name TEXT NOT NULL,
+                    scheduled_at TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    destination_id TEXT NOT NULL DEFAULT '*',
+                    source_path TEXT NOT NULL,
+                    content_sha256 TEXT,
+                    status TEXT NOT NULL DEFAULT 'Pending',
+                    external_id TEXT,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    started_at TEXT,
+                    uploaded_at TEXT,
+                    accepted_at TEXT,
+                    published_at TEXT,
+                    last_error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (video_name, scheduled_at, platform, destination_id)
+                )
+            """)
+
+            # Import old accepted uploads exactly once. A missing source file still
+            # gets a filename-based legacy receipt, which conservatively blocks the
+            # same named clip from being uploaded again to that destination.
+            legacy_receipts_exist = self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_ledger'"
+            ).fetchone()
+            if legacy_receipts_exist:
+                now_text = datetime.now().astimezone().isoformat(timespec="seconds")
+                credential_data = read_json(CREDENTIALS_PATH, {})
+                youtube_destination = str(credential_data.get("yt_channel_id") or "*")
+                clip_rows = self.conn.execute("SELECT * FROM clips").fetchall()
+                for clip in clip_rows:
+                    path = str(clip["path"])
+                    video_name = Path(path).name
+                    status = str(clip["yt_status"] or "Pending")
+                    video_id = clip["yt_video_id"]
+                    normalized = status.strip().lower()
+                    if video_id or normalized not in {"", "pending", "not scheduled"}:
+                        if normalized == "published":
+                            receipt_status = "Published"
+                        elif normalized in {"scheduled", "accepted"}:
+                            receipt_status = "Scheduled" if video_id else "Unknown"
+                        elif normalized in {"uploading"}:
+                            receipt_status = "Partial"
+                        elif normalized in {"uploaded"}:
+                            receipt_status = "Uploaded"
+                        elif normalized in {"partial", "partially uploaded", "unknown"}:
+                            receipt_status = "Partial" if normalized != "unknown" else "Unknown"
+                        elif normalized.startswith("error") or normalized == "failed":
+                            receipt_status = "Failed"
+                        else:
+                            receipt_status = "Unknown"
+                        scheduled_at = str(clip["publish_at"] or f"legacy:{clip['modified'] or 'unknown'}")
+                        content_hash = clip["content_sha256"]
+                        if not content_hash and Path(path).is_file():
+                            try:
+                                content_hash = sha256_file(path)
+                                self.conn.execute(
+                                    "UPDATE clips SET content_sha256=? WHERE path=? AND content_sha256 IS NULL",
+                                    (content_hash, path)
+                                )
+                            except OSError as exc:
+                                logger.warning("Could not fingerprint legacy clip %s: %s", path, exc)
+                        accepted_at = now_text if receipt_status in {"Scheduled", "Published"} else None
+                        self.conn.execute("""
+                            INSERT OR IGNORE INTO upload_ledger
+                            (video_name,scheduled_at,platform,destination_id,source_path,
+                             content_sha256,status,external_id,attempt_count,accepted_at,
+                             last_error,created_at,updated_at)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        """, (
+                            video_name, scheduled_at, "youtube", youtube_destination, path,
+                            content_hash, receipt_status, video_id, 1 if video_id else 0,
+                            accepted_at, clip["yt_error"], now_text, now_text
+                        ))
+
+                fb_rows = self.conn.execute("SELECT * FROM facebook_page_jobs").fetchall()
+                for job in fb_rows:
+                    status = str(job["status"] or "Pending")
+                    normalized = status.strip().lower()
+                    video_id = job["video_id"]
+                    if not video_id and normalized in {"", "pending", "not scheduled"}:
+                        continue
+                    if normalized == "published":
+                        receipt_status = "Published"
+                    elif normalized in {"scheduled", "accepted"}:
+                        receipt_status = "Scheduled" if video_id else "Unknown"
+                    elif normalized == "uploading":
+                        receipt_status = "Partial"
+                    elif normalized == "uploaded":
+                        receipt_status = "Uploaded"
+                    elif normalized in {"partial", "partially uploaded", "unknown"}:
+                        receipt_status = "Partial" if normalized != "unknown" else "Unknown"
+                    elif normalized.startswith("error") or normalized == "failed":
+                        receipt_status = "Failed"
+                    else:
+                        receipt_status = "Unknown"
+                    clip = self.conn.execute(
+                        "SELECT content_sha256 FROM clips WHERE path=?", (job["path"],)
+                    ).fetchone()
+                    content_hash = clip["content_sha256"] if clip else None
+                    now_text = datetime.now().astimezone().isoformat(timespec="seconds")
+                    self.conn.execute("""
+                        INSERT OR IGNORE INTO upload_ledger
+                        (video_name,scheduled_at,platform,destination_id,source_path,
+                         content_sha256,status,external_id,attempt_count,accepted_at,
+                         last_error,created_at,updated_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        Path(job["path"]).name, job["publish_at"], "facebook",
+                        str(job["page_id"]), job["path"], content_hash, receipt_status,
+                        video_id, 1 if video_id else 0, job["submitted_at"],
+                        job["error"], now_text, now_text
+                    ))
+
+            # Keep one authoritative receipt when legacy databases already contain
+            # duplicate accepted rows for the same file bytes/destination. Older rows
+            # remain in the ledger as "Duplicate blocked" history.
+            for key_row in self.conn.execute("""
+                SELECT content_sha256, platform, destination_id
+                FROM upload_ledger
+                WHERE content_sha256 IS NOT NULL
+                  AND status IN ('Uploading','Partial','Uploaded','Scheduled','Published','Unknown')
+                GROUP BY content_sha256, platform, destination_id
+                HAVING COUNT(*) > 1
+            """).fetchall():
+                duplicate_rows = self.conn.execute("""
+                    SELECT video_name, scheduled_at, platform, destination_id
+                    FROM upload_ledger
+                    WHERE content_sha256=? AND platform=? AND destination_id=?
+                      AND status IN ('Uploading','Partial','Uploaded','Scheduled','Published','Unknown')
+                    ORDER BY CASE status
+                      WHEN 'Published' THEN 0 WHEN 'Scheduled' THEN 1
+                      WHEN 'Uploaded' THEN 2 WHEN 'Partial' THEN 3
+                      WHEN 'Unknown' THEN 4 WHEN 'Uploading' THEN 5
+                      WHEN 'Duplicate blocked' THEN 9 ELSE 8 END,
+                      updated_at ASC
+                """, tuple(key_row)).fetchall()
+                for duplicate in duplicate_rows[1:]:
+                    self.conn.execute("""
+                        UPDATE upload_ledger
+                        SET status='Duplicate blocked',
+                            last_error=COALESCE(last_error,
+                              'A prior receipt for this video already exists on this destination.'),
+                            updated_at=?
+                        WHERE video_name=? AND scheduled_at=? AND platform=? AND destination_id=?
+                    """, (
+                        datetime.now().astimezone().isoformat(timespec="seconds"),
+                        duplicate["video_name"], duplicate["scheduled_at"],
+                        duplicate["platform"], duplicate["destination_id"]
+                    ))
+
+            for key_row in self.conn.execute("""
+                SELECT video_name, platform, destination_id
+                FROM upload_ledger
+                WHERE content_sha256 IS NULL
+                  AND status IN ('Uploading','Partial','Uploaded','Scheduled','Published','Unknown')
+                GROUP BY video_name, platform, destination_id
+                HAVING COUNT(*) > 1
+            """).fetchall():
+                duplicate_rows = self.conn.execute("""
+                    SELECT video_name, scheduled_at, platform, destination_id
+                    FROM upload_ledger
+                    WHERE video_name=? AND platform=? AND destination_id=?
+                      AND content_sha256 IS NULL
+                      AND status IN ('Uploading','Partial','Uploaded','Scheduled','Published','Unknown')
+                    ORDER BY CASE status
+                      WHEN 'Published' THEN 0 WHEN 'Scheduled' THEN 1
+                      WHEN 'Uploaded' THEN 2 WHEN 'Partial' THEN 3
+                      WHEN 'Unknown' THEN 4 WHEN 'Uploading' THEN 5
+                      WHEN 'Duplicate blocked' THEN 9 ELSE 8 END,
+                      updated_at ASC
+                """, tuple(key_row)).fetchall()
+                for duplicate in duplicate_rows[1:]:
+                    self.conn.execute("""
+                        UPDATE upload_ledger
+                        SET status='Duplicate blocked',
+                            last_error=COALESCE(last_error,
+                              'A prior receipt for this filename already exists on this destination.'),
+                            updated_at=?
+                        WHERE video_name=? AND scheduled_at=? AND platform=? AND destination_id=?
+                    """, (
+                        datetime.now().astimezone().isoformat(timespec="seconds"),
+                        duplicate["video_name"], duplicate["scheduled_at"],
+                        duplicate["platform"], duplicate["destination_id"]
+                    ))
+
+            # Normalize existing failure labels so they remain visible and only a
+            # confirmed failure can be explicitly reset for another upload attempt.
+            self.conn.execute("""
+                UPDATE clips SET yt_status='Failed'
+                WHERE yt_status LIKE 'Error%'
+            """)
+            self.conn.execute("""
+                UPDATE facebook_page_jobs SET status='Failed'
+                WHERE status='Error' OR status LIKE 'Error:%'
+            """)
+            self.conn.execute("""
+                UPDATE upload_ledger SET status='Failed'
+                WHERE status='Error' OR status LIKE 'Error:%'
+            """)
+
+            # The partial unique index is the database-level duplicate barrier.
+            # It prevents two active/accepted receipts for identical file bytes on
+            # the same platform destination, independent of filename or schedule time.
+            self.conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_upload_ledger_status
+                ON upload_ledger(status, platform, destination_id)
+            """)
+            self.conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_upload_ledger_name_time
+                ON upload_ledger(video_name, scheduled_at)
+            """)
+            self.conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_upload_ledger_content_destination
+                ON upload_ledger(content_sha256, platform, destination_id)
+                WHERE content_sha256 IS NOT NULL
+                  AND status IN ('Uploading','Partial','Uploaded','Scheduled','Published','Unknown')
+            """)
+            self.conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_upload_ledger_legacy_name_destination
+                ON upload_ledger(video_name, platform, destination_id)
+                WHERE content_sha256 IS NULL
+                  AND status IN ('Uploading','Partial','Uploaded','Scheduled','Published','Unknown')
+            """)
+
+            # A prior process may have died after a request reached a platform but
+            # before the response was committed. Never auto-retry this uncertain case.
+            self.conn.execute("""
+                UPDATE upload_ledger
+                SET status='Partial',
+                    last_error=COALESCE(last_error,
+                      'The app stopped during an upload. Check the platform before retrying.'),
+                    updated_at=?
+                WHERE status='Uploading'
+            """, (datetime.now().astimezone().isoformat(timespec="seconds"),))
+            self.conn.execute(
+                "UPDATE clips SET yt_status='Partial', yt_error=COALESCE(yt_error, "
+                "'Previous upload outcome is uncertain; check YouTube before retrying.') "
+                "WHERE yt_status='Uploading'"
+            )
+            self.conn.execute(
+                "UPDATE clips SET yt_status='Failed' WHERE yt_status LIKE 'Error%'"
+            )
+            self.conn.execute(
+                "UPDATE clips SET fb_status='Failed' WHERE fb_status LIKE 'Error%'"
+            )
+            self.conn.execute(
+                "UPDATE facebook_page_jobs SET status='Partial', error=COALESCE(error, "
+                "'Previous upload outcome is uncertain; check Facebook before retrying.') "
+                "WHERE status='Uploading'"
+            )
+            self.conn.execute("PRAGMA user_version = 2")
             self.conn.commit()
+
+    def content_sha256_for_path(self, path):
+        """Return or safely calculate the stable content identity for a queued MP4."""
+        with self.db_lock:
+            row = self.conn.execute(
+                "SELECT content_sha256 FROM clips WHERE path=?", (str(path),)
+            ).fetchone()
+        if row and row["content_sha256"]:
+            return str(row["content_sha256"])
+        if not Path(path).is_file():
+            return None
+        try:
+            digest = sha256_file(path)
+        except OSError as exc:
+            raise RuntimeError(f"Could not fingerprint {Path(path).name}: {exc}") from exc
+        self.db_execute(
+            "UPDATE clips SET content_sha256=COALESCE(content_sha256,?) WHERE path=?",
+            (digest, str(path))
+        )
+        with self.db_lock:
+            current = self.conn.execute(
+                "SELECT content_sha256 FROM clips WHERE path=?", (str(path),)
+            ).fetchone()
+        return str(current["content_sha256"]) if current and current["content_sha256"] else digest
+
+    def upload_destination_id(self, platform, destination_id=None):
+        if platform == "youtube":
+            return str(destination_id or self.secrets.get("yt_channel_id") or "*")
+        return str(destination_id or "*")
+
+    def record_scheduled_upload(self, path, platform, destination_id, scheduled_at):
+        """Persist the name+time primary-key row before any network upload begins."""
+        content_hash = self.content_sha256_for_path(path)
+        if not Path(path).is_file() and not content_hash:
+            # Legacy rows whose MP4 was moved/deleted keep a filename identity.
+            content_hash = None
+        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        values = (
+            Path(path).name, str(scheduled_at), str(platform),
+            self.upload_destination_id(platform, destination_id), str(path),
+            content_hash, stamp
+        )
+        self.db_execute("""
+            INSERT OR IGNORE INTO upload_ledger
+            (video_name,scheduled_at,platform,destination_id,source_path,
+             content_sha256,status,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,'Pending',?,?)
+        """, values[:6] + (stamp, stamp))
+
+    def find_protected_upload(self, path, platform, destination_id, content_hash=None):
+        """Find an earlier in-progress, partial, uploaded, scheduled or published copy."""
+        destination = self.upload_destination_id(platform, destination_id)
+        protected = tuple(UPLOAD_PROTECTED_STATES)
+        placeholders = ",".join("?" for _ in protected)
+        with self.db_lock:
+            if content_hash:
+                row = self.conn.execute(f"""
+                    SELECT * FROM upload_ledger
+                    WHERE platform=? AND destination_id IN (?, '*')
+                      AND status IN ({placeholders})
+                      AND (content_sha256=? OR (content_sha256 IS NULL AND video_name=?))
+                    ORDER BY CASE status
+                      WHEN 'Published' THEN 0 WHEN 'Scheduled' THEN 1
+                      WHEN 'Uploaded' THEN 2 WHEN 'Partial' THEN 3
+                      WHEN 'Unknown' THEN 4 WHEN 'Uploading' THEN 5
+                      WHEN 'Duplicate blocked' THEN 9 ELSE 8 END,
+                      updated_at DESC LIMIT 1
+                """, (platform, destination, *protected, content_hash, Path(path).name)).fetchone()
+            else:
+                row = self.conn.execute(f"""
+                    SELECT * FROM upload_ledger
+                    WHERE platform=? AND destination_id IN (?, '*')
+                      AND video_name=? AND content_sha256 IS NULL
+                      AND status IN ({placeholders})
+                    ORDER BY updated_at DESC LIMIT 1
+                """, (platform, destination, Path(path).name, *protected)).fetchone()
+            return dict(row) if row else None
+
+    def sync_duplicate_upload_statuses(self):
+        """Mirror previously handled videos onto newly scanned duplicate queue rows."""
+        for row in self.get_clips():
+            video_status = str(row.get("yt_status") or "Pending")
+            if video_status in {"Pending", "Retryable"}:
+                previous = self.find_protected_upload(
+                    row["path"], "youtube", self.upload_destination_id("youtube"),
+                    row.get("content_sha256")
+                )
+                if previous:
+                    self.db_execute("""
+                        INSERT OR IGNORE INTO upload_ledger
+                        (video_name,scheduled_at,platform,destination_id,source_path,content_sha256,
+                         status,external_id,last_error,created_at,updated_at)
+                        VALUES (?,?,?,?,?,?,'Duplicate blocked',?,?,?,?)
+                    """, (
+                        Path(row["path"]).name, str(row["publish_at"]), "youtube",
+                        self.upload_destination_id("youtube"), row["path"], row.get("content_sha256"),
+                        previous.get("external_id"),
+                        f"Duplicate blocked by existing {previous['status']} YouTube receipt.",
+                        datetime.now().astimezone().isoformat(timespec="seconds"),
+                        datetime.now().astimezone().isoformat(timespec="seconds")
+                    ))
+                    self.db_execute(
+                        "UPDATE clips SET yt_status=?, yt_video_id=COALESCE(?,yt_video_id), yt_error=? WHERE path=?",
+                        (
+                            previous["status"], previous.get("external_id"),
+                            f"Duplicate blocked: an existing {previous['status']} YouTube receipt exists.",
+                            row["path"]
+                        )
+                    )
+                    self.log(
+                        f"Duplicate detected: {Path(row['path']).name} already has a "
+                        f"{previous['status']} receipt on YouTube; it will not be uploaded again."
+                    )
+
+            with self.db_lock:
+                page_jobs = [
+                    dict(job) for job in self.conn.execute(
+                        "SELECT * FROM facebook_page_jobs WHERE path=?", (row["path"],)
+                    ).fetchall()
+                ]
+            facebook_changed = False
+            for job in page_jobs:
+                job_status = str(job.get("status") or "Pending")
+                if job_status not in {"Pending", "Retryable"}:
+                    continue
+                previous = self.find_protected_upload(
+                    row["path"], "facebook", job["page_id"], row.get("content_sha256")
+                )
+                if previous:
+                    self.db_execute("""
+                        INSERT OR IGNORE INTO upload_ledger
+                        (video_name,scheduled_at,platform,destination_id,source_path,content_sha256,
+                         status,external_id,last_error,created_at,updated_at)
+                        VALUES (?,?,?,?,?,?,'Duplicate blocked',?,?,?,?)
+                    """, (
+                        Path(row["path"]).name, str(job["publish_at"]), "facebook",
+                        str(job["page_id"]), row["path"], row.get("content_sha256"),
+                        previous.get("external_id"),
+                        f"Duplicate blocked by existing {previous['status']} Facebook receipt.",
+                        datetime.now().astimezone().isoformat(timespec="seconds"),
+                        datetime.now().astimezone().isoformat(timespec="seconds")
+                    ))
+                    self.db_execute(
+                        "UPDATE facebook_page_jobs SET status=?, video_id=COALESCE(?,video_id), error=? "
+                        "WHERE path=? AND page_id=?",
+                        (
+                            previous["status"], previous.get("external_id"),
+                            f"Duplicate blocked: an existing {previous['status']} receipt exists.",
+                            row["path"], job["page_id"]
+                        )
+                    )
+                    facebook_changed = True
+                    self.log(
+                        f"Duplicate detected: {Path(row['path']).name} already has a "
+                        f"{previous['status']} receipt on Facebook Page {job['page_name']}; "
+                        "it will not be uploaded again."
+                    )
+            if facebook_changed:
+                self.update_fb_aggregate(
+                    row["path"], [{"id": job["page_id"]} for job in page_jobs]
+                )
+
+    def set_upload_receipt_state(
+        self, path, platform, destination_id, scheduled_at, status,
+        external_id=None, error=None, uploaded=False, published=False
+    ):
+        """Commit platform progress durably and mirror it into the visible queue."""
+        video_name = Path(path).name
+        destination = self.upload_destination_id(platform, destination_id)
+        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        with self.db_lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            self.conn.execute("""
+                UPDATE upload_ledger
+                SET status=?, external_id=COALESCE(?,external_id),
+                    uploaded_at=CASE WHEN ? THEN COALESCE(uploaded_at,?) ELSE uploaded_at END,
+                    accepted_at=CASE WHEN ? THEN COALESCE(accepted_at,?) ELSE accepted_at END,
+                    published_at=CASE WHEN ? THEN COALESCE(published_at,?) ELSE published_at END,
+                    last_error=?, updated_at=?
+                WHERE video_name=? AND scheduled_at=? AND platform=? AND destination_id=?
+            """, (
+                status, external_id,
+                int(uploaded), stamp,
+                int(status in {"Scheduled", "Published"}), stamp,
+                int(published or status == "Published"), stamp,
+                error, stamp, video_name, str(scheduled_at), str(platform), destination
+            ))
+            if platform == "youtube":
+                self.conn.execute("""
+                    UPDATE clips SET yt_status=?, yt_video_id=COALESCE(?,yt_video_id),
+                      yt_error=? WHERE path=?
+                """, (status, external_id, error, str(path)))
+            elif platform == "facebook":
+                self.conn.execute("""
+                    UPDATE facebook_page_jobs
+                    SET status=?, video_id=COALESCE(?,video_id), error=?
+                    WHERE path=? AND page_id=?
+                """, (status, external_id, error, str(path), destination))
+            self.conn.commit()
+
+    def claim_platform_upload(self, path, platform, destination_id, scheduled_at):
+        """Atomically reserve an upload slot or block a previously handled video."""
+        content_hash = self.content_sha256_for_path(path)
+        destination = self.upload_destination_id(platform, destination_id)
+        video_name = Path(path).name
+        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        protected = tuple(UPLOAD_PROTECTED_STATES)
+        placeholders = ",".join("?" for _ in protected)
+        with self.db_lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            if content_hash:
+                previous = self.conn.execute(f"""
+                    SELECT * FROM upload_ledger
+                    WHERE platform=? AND destination_id IN (?, '*')
+                      AND status IN ({placeholders})
+                      AND (content_sha256=? OR (content_sha256 IS NULL AND video_name=?))
+                    ORDER BY CASE status
+                      WHEN 'Published' THEN 0 WHEN 'Scheduled' THEN 1
+                      WHEN 'Uploaded' THEN 2 WHEN 'Partial' THEN 3
+                      WHEN 'Unknown' THEN 4 WHEN 'Uploading' THEN 5
+                      WHEN 'Duplicate blocked' THEN 9 ELSE 8 END,
+                      updated_at DESC LIMIT 1
+                """, (platform, destination, *protected, content_hash, video_name)).fetchone()
+            else:
+                previous = self.conn.execute(f"""
+                    SELECT * FROM upload_ledger
+                    WHERE platform=? AND destination_id IN (?, '*')
+                      AND video_name=? AND content_sha256 IS NULL
+                      AND status IN ({placeholders})
+                    ORDER BY updated_at DESC LIMIT 1
+                """, (platform, destination, video_name, *protected)).fetchone()
+
+            if previous:
+                previous = dict(previous)
+                prior_status = previous["status"]
+                prior_id = previous["external_id"]
+                # Copy the already-known platform state onto a duplicate queue row.
+                self.conn.execute("""
+                    INSERT OR IGNORE INTO upload_ledger
+                    (video_name,scheduled_at,platform,destination_id,source_path,
+                     content_sha256,status,external_id,attempt_count,last_error,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,0,?,?,?)
+                """, (
+                    video_name, str(scheduled_at), platform, destination, str(path),
+                    content_hash, "Duplicate blocked", prior_id,
+                    f"Duplicate blocked: this video already has a {prior_status} receipt.",
+                    stamp, stamp
+                ))
+                self.conn.execute("UPDATE upload_ledger SET status='Duplicate blocked',"
+                                  "external_id=COALESCE(?,external_id),last_error=?,updated_at=? "
+                                  "WHERE video_name=? AND scheduled_at=? AND platform=? AND destination_id=?",
+                                  (prior_id, f"Duplicate blocked: prior receipt is {prior_status}.",
+                                   stamp, video_name, str(scheduled_at), platform, destination))
+                if platform == "youtube":
+                    self.conn.execute(
+                        "UPDATE clips SET yt_status=?, yt_video_id=COALESCE(?,yt_video_id), yt_error=? WHERE path=?",
+                        (prior_status, prior_id,
+                         f"Duplicate blocked by existing {prior_status} upload receipt.", str(path))
+                    )
+                else:
+                    self.conn.execute(
+                        "UPDATE facebook_page_jobs SET status=?, video_id=COALESCE(?,video_id), error=? "
+                        "WHERE path=? AND page_id=?",
+                        (prior_status, prior_id,
+                         f"Duplicate blocked by existing {prior_status} upload receipt.", str(path), destination)
+                    )
+                self.conn.commit()
+                return False, previous
+
+            self.conn.execute("""
+                INSERT INTO upload_ledger
+                (video_name,scheduled_at,platform,destination_id,source_path,
+                 content_sha256,status,attempt_count,started_at,last_error,created_at,updated_at)
+                VALUES (?,?,?,?,? ,?,'Uploading',1,?,NULL,?,?)
+                ON CONFLICT(video_name,scheduled_at,platform,destination_id) DO UPDATE SET
+                    source_path=excluded.source_path,
+                    content_sha256=COALESCE(upload_ledger.content_sha256,excluded.content_sha256),
+                    status='Uploading',
+                    attempt_count=upload_ledger.attempt_count+1,
+                    started_at=excluded.started_at,
+                    last_error=NULL,
+                    updated_at=excluded.updated_at
+            """, (video_name, str(scheduled_at), platform, destination, str(path),
+                  content_hash, stamp, stamp, stamp))
+            if platform == "youtube":
+                self.conn.execute(
+                    "UPDATE clips SET yt_status='Uploading', yt_error=NULL WHERE path=?",
+                    (str(path),)
+                )
+            else:
+                self.conn.execute(
+                    "UPDATE facebook_page_jobs SET status='Uploading', error=NULL WHERE path=? AND page_id=?",
+                    (str(path), destination)
+                )
+            self.conn.commit()
+            return True, None
+
+    def get_platform_receipt(self, path, platform, destination_id, scheduled_at):
+        destination = self.upload_destination_id(platform, destination_id)
+        with self.db_lock:
+            row = self.conn.execute("""
+                SELECT * FROM upload_ledger
+                WHERE video_name=? AND scheduled_at=? AND platform=? AND destination_id=?
+            """, (Path(path).name, str(scheduled_at), platform, destination)).fetchone()
+            return dict(row) if row else None
 
     def build_ui(self):
         style = ttk.Style()
@@ -1377,17 +2014,20 @@ class SchedulerApp:
                             privacy = str(status.get("privacyStatus") or "").lower()
                             upload_state = str(status.get("uploadStatus") or "").lower()
                             if privacy == "public" and upload_state == "processed":
-                                self.db_execute(
-                                    "UPDATE clips SET yt_status='Published', yt_error=NULL WHERE path=?",
-                                    (row["path"],)
+                                self.set_upload_receipt_state(
+                                    row["path"], "youtube", self.upload_destination_id("youtube"),
+                                    row["publish_at"], "Published",
+                                    external_id=row["yt_video_id"], published=True
                                 )
                                 newly_published += 1
                                 self.log(f"YouTube publication verified: {Path(row['path']).name}")
                             elif upload_state in {"failed", "rejected", "deleted"}:
                                 reason = status.get("failureReason") or status.get("rejectionReason") or upload_state
-                                self.db_execute(
-                                    "UPDATE clips SET yt_status='Error', yt_error=? WHERE path=?",
-                                    (f"YouTube status check: {reason}", row["path"])
+                                self.set_upload_receipt_state(
+                                    row["path"], "youtube", self.upload_destination_id("youtube"),
+                                    row["publish_at"], "Failed",
+                                    external_id=row["yt_video_id"],
+                                    error=f"YouTube status check: {reason}"
                                 )
                                 errors.append(f"YouTube: {Path(row['path']).name} ({reason})")
                 except Exception as exc:
@@ -1433,9 +2073,9 @@ class SchedulerApp:
                     video_status = str(status.get("video_status") or "").lower()
                     checked += 1
                     if publish_status == "published" and phase_status == "complete":
-                        self.db_execute(
-                            "UPDATE facebook_page_jobs SET status='Published', error=NULL WHERE path=? AND page_id=?",
-                            (job["path"], page_id)
+                        self.set_upload_receipt_state(
+                            job["path"], "facebook", page_id, job["publish_at"], "Published",
+                            external_id=job["video_id"], published=True
                         )
                         changed_fb_paths.add(job["path"])
                         newly_published += 1
@@ -1447,9 +2087,10 @@ class SchedulerApp:
                         "error", "upload_failed", "expired"
                     }:
                         detail = json.dumps(status, ensure_ascii=False)[:1200]
-                        self.db_execute(
-                            "UPDATE facebook_page_jobs SET status='Error', error=? WHERE path=? AND page_id=?",
-                            (f"Facebook publication status: {detail}", job["path"], page_id)
+                        self.set_upload_receipt_state(
+                            job["path"], "facebook", page_id, job["publish_at"], "Failed",
+                            external_id=job["video_id"],
+                            error=f"Facebook publication status: {detail}"
                         )
                         changed_fb_paths.add(job["path"])
                         errors.append(f"Facebook: {Path(job['path']).name} on {job.get('page_name') or page_id} failed")
@@ -1668,41 +2309,33 @@ class SchedulerApp:
     @staticmethod
     def get_queue_row_status(row, page_job_map, selected_pages, include_youtube, include_facebook):
         statuses = []
-
         if include_youtube:
             statuses.append(str(row.get("yt_status") or "Pending").strip().lower())
-
         if include_facebook:
             if selected_pages:
                 for page in selected_pages:
                     job = page_job_map.get((row["path"], str(page["id"])))
-                    statuses.append(
-                        str((job or {}).get("status") or "Pending").strip().lower()
-                    )
+                    statuses.append(str((job or {}).get("status") or "Pending").strip().lower())
             else:
-                # Do not imply Facebook scheduling when no Page is selected.
                 statuses.append("no page selected")
-
         if not statuses:
             return "Choose platform"
-
-        if any(status == "error" or status.startswith("error") for status in statuses):
-            return "⚠ Failed"
+        if any(status in {"error", "failed"} or status.startswith("error") for status in statuses):
+            return "Failed"
         if any(status.startswith("skipped") for status in statuses):
-            return "⚠ Skipped"
-
-        published_states = {"published"}
-        scheduled_states = {"scheduled", "published"}
-        if all(status in published_states for status in statuses):
-            return "✓ Published"
-        if all(status in scheduled_states for status in statuses) and any(
-            status == "scheduled" for status in statuses
-        ):
-            return "✓ Scheduled"
+            return "Skipped"
+        if any(status in {"partial", "partially uploaded", "unknown", "duplicate blocked"} for status in statuses):
+            return "Partial"
+        if any(status == "uploading" for status in statuses):
+            return "Uploading"
+        if all(status == "published" for status in statuses):
+            return "Published"
+        if all(status in {"scheduled", "published"} for status in statuses):
+            return "Scheduled"
         if all(status == "uploaded" for status in statuses):
-            return "↑ Uploaded"
+            return "Uploaded"
         if any(status in {"scheduled", "published", "uploaded"} for status in statuses):
-            return "◐ Partial"
+            return "Partial"
         return "Pending"
 
     @staticmethod
@@ -1711,12 +2344,13 @@ class SchedulerApp:
         rank = {
             "Pending": 0,
             "Choose platform": 0,
-            "⚠ Failed": 1,
-            "⚠ Skipped": 1,
-            "◐ Partial": 2,
-            "↑ Uploaded": 3,
-            "✓ Scheduled": 4,
-            "✓ Published": 5,
+            "Failed": 1,
+            "Skipped": 1,
+            "Partial": 2,
+            "Uploading": 3,
+            "Uploaded": 4,
+            "Scheduled": 5,
+            "Published": 6,
         }.get(display_status, 0)
         return (
             rank,
@@ -1867,17 +2501,31 @@ class SchedulerApp:
                     missing_txt += 1
                     title, description = video.stem, ""
                 width, height, duration, fb_ok = probe_video(video)
+                try:
+                    content_hash = sha256_file(video)
+                except OSError as exc:
+                    self.log(f"Could not fingerprint {video.name}; it will not be uploaded without a safe identity: {exc}")
+                    content_hash = None
                 self.db_execute(
                     """INSERT OR IGNORE INTO clips
-                    (path,title,description,width,height,duration,fb_ok,modified)
-                    VALUES (?,?,?,?,?,?,?,?)""",
+                    (path,title,description,width,height,duration,fb_ok,modified,content_sha256)
+                    VALUES (?,?,?,?,?,?,?,?,?)""",
                     (str(video), title, description, width, height, duration,
-                     1 if fb_ok else (0 if fb_ok is False else None), video.stat().st_mtime)
+                     1 if fb_ok else (0 if fb_ok is False else None),
+                     video.stat().st_mtime, content_hash)
                 )
+                # Fill a legacy row's missing fingerprint, but never replace an
+                # existing identity just because a file at that path was overwritten.
+                if content_hash:
+                    self.db_execute(
+                        "UPDATE clips SET content_sha256=? WHERE path=? AND content_sha256 IS NULL",
+                        (content_hash, str(video))
+                    )
                 added += 1
                 if i % 20 == 0:
                     self.log(f"Scanned {i}/{len(videos)} videos…")
             self.log(f"Scan complete: {len(videos)} MP4 files, {added} matched TXT pairs, {missing_txt} missing TXT files.")
+            self.sync_duplicate_upload_statuses()
             rows = self.get_clips()
             yt_pending = sum(1 for r in rows if r["yt_status"] not in {"Scheduled", "Published"})
             recommended = suggested_start(yt_pending, self.youtube_var.get())
@@ -2168,16 +2816,25 @@ class SchedulerApp:
         )
 
     def reset_failed(self):
-        self.db_execute(
-            "UPDATE clips SET yt_status='Pending', yt_error=NULL WHERE yt_status LIKE 'Error%'"
-        )
-        self.db_execute(
-            "UPDATE clips SET fb_status='Pending', fb_error=NULL WHERE fb_status LIKE 'Error%'"
-        )
-        self.db_execute(
-            "UPDATE facebook_page_jobs SET status='Pending', error=NULL WHERE status='Error'"
-        )
-        self.log("Failed items reset to Pending. Successful Page schedules were left unchanged.")
+        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        with self.db_lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            self.conn.execute(
+                "UPDATE clips SET yt_status='Pending', yt_error=NULL WHERE yt_status IN ('Error','Failed')"
+            )
+            self.conn.execute(
+                "UPDATE clips SET fb_status='Pending', fb_error=NULL WHERE fb_status IN ('Error','Failed')"
+            )
+            self.conn.execute(
+                "UPDATE facebook_page_jobs SET status='Pending', error=NULL WHERE status IN ('Error','Failed')"
+            )
+            self.conn.execute(
+                "UPDATE upload_ledger SET status='Retryable', last_error=NULL, updated_at=? "
+                "WHERE status='Failed'",
+                (stamp,)
+            )
+            self.conn.commit()
+        self.log("Confirmed failures reset to Pending. Partial, uncertain, uploaded, scheduled and published receipts remain locked against duplicate uploads.")
         self.refresh_table()
 
     def start_scheduling(self):
@@ -2290,6 +2947,21 @@ class SchedulerApp:
                         )
                         return
 
+        # Record every scheduled destination by its composite filename/time key
+        # before any publisher thread is allowed to issue a platform request.
+        for row in rows:
+            if yt_enabled and row.get("publish_at"):
+                self.record_scheduled_upload(
+                    row["path"], "youtube", self.upload_destination_id("youtube"), row["publish_at"]
+                )
+            if fb_enabled:
+                for page in selected_pages:
+                    job = self.get_fb_job(row["path"], page["id"])
+                    if job and job.get("publish_at"):
+                        self.record_scheduled_upload(
+                            row["path"], "facebook", page["id"], job["publish_at"]
+                        )
+
         incompatible = [r for r in rows if fb_enabled and r["fb_ok"] == 0]
         if incompatible and not messagebox.askyesno(
             "Facebook format warning",
@@ -2298,14 +2970,27 @@ class SchedulerApp:
         ):
             return
 
+        self.sync_duplicate_upload_statuses()
+        rows = self.filter_queue_rows(self.get_clips(), selected_paths)
+
         pending_paths = []
         for row in rows:
-            yt_todo = yt_enabled and row["yt_status"] not in {"Scheduled", "Published"}
+            yt_todo = yt_enabled and str(row.get("yt_status") or "Pending") in {"Pending", "Retryable"}
+            if yt_todo and self.find_protected_upload(
+                row["path"], "youtube", self.upload_destination_id("youtube"),
+                row.get("content_sha256")
+            ):
+                yt_todo = False
             fb_todo = False
             if fb_enabled:
                 for page in selected_pages:
                     job = self.get_fb_job(row["path"], page["id"])
-                    if not job or job["status"] not in {"Scheduled", "Published"}:
+                    eligible = not job or str(job.get("status") or "Pending") in {"Pending", "Retryable"}
+                    if eligible and self.find_protected_upload(
+                        row["path"], "facebook", page["id"], row.get("content_sha256")
+                    ):
+                        eligible = False
+                    if eligible:
                         fb_todo = True
                         break
             if yt_todo or fb_todo:
@@ -2325,8 +3010,8 @@ class SchedulerApp:
         page_names = ", ".join(page.get("name") or page["id"] for page in selected_pages)
         fb_message = (
             f"Facebook Pages: {page_names}\n"
-            "Facebook limit: plan for at most 30 API Reels per Page per moving 24 hours; "
-            "the next batch is delayed by 24 hours plus a 5-minute buffer.\n"
+            "Facebook uploads continue until Meta returns an actual API rejection. "
+            "The app does not impose its own daily upload cap.\n"
             if fb_enabled else ""
         )
         scope = (
@@ -2393,29 +3078,58 @@ class SchedulerApp:
                 title = row["title"]
                 description = row["description"]
 
-                if yt_enabled and row["yt_status"] not in {"Scheduled", "Published"}:
+                if yt_enabled and str(row.get("yt_status") or "Pending") in {"Pending", "Retryable"}:
                     if not row.get("publish_at"):
                         self.db_execute(
-                            "UPDATE clips SET yt_status='Error', yt_error=? WHERE path=?",
+                            "UPDATE clips SET yt_status='Failed', yt_error=? WHERE path=?",
                             ("No YouTube publish time has been assigned.", path)
+                        )
+                    elif not Path(path).is_file():
+                        self.db_execute(
+                            "UPDATE clips SET yt_status='Failed', yt_error=? WHERE path=?",
+                            ("The MP4 file is missing; no upload request was sent.", path)
                         )
                     else:
                         publish_at = datetime.fromisoformat(row["publish_at"]).astimezone()
                         while not self.stop_event.is_set():
+                            allowed, previous = self.claim_platform_upload(
+                                path, "youtube", self.upload_destination_id("youtube"),
+                                publish_at.isoformat()
+                            )
+                            if not allowed:
+                                row["yt_status"] = (previous or {}).get("status", "Partial")
+                                row["yt_video_id"] = (previous or {}).get("external_id")
+                                self.log(
+                                    f"YouTube duplicate blocked for {name}: an existing "
+                                    f"{row['yt_status']} upload receipt already exists. No second upload was sent."
+                                )
+                                break
                             try:
-                                self.log(f"YouTube upload: {name}")
+                                self.log(f"YouTube upload started: {name}")
                                 video_id = self.upload_youtube(
                                     path, title, description, publish_at,
                                     yt_ai, made_for_kids, category_id
                                 )
-                                self.db_execute(
-                                    "UPDATE clips SET yt_status='Scheduled', yt_video_id=?, yt_error=NULL WHERE path=?",
-                                    (video_id, path)
+                                self.set_upload_receipt_state(
+                                    path, "youtube", self.upload_destination_id("youtube"),
+                                    publish_at.isoformat(), "Scheduled",
+                                    external_id=video_id
                                 )
-                                self.log(f"YouTube accepted: {name} → {publish_at.strftime('%Y-%m-%d %H:%M')}")
+                                row["yt_status"] = "Scheduled"
+                                row["yt_video_id"] = video_id
+                                self.log(
+                                    f"YouTube accepted: {name} -> {publish_at.strftime('%Y-%m-%d %H:%M')} "
+                                    f"(video ID {video_id})"
+                                )
                                 break
                             except Exception as exc:
                                 if self.is_youtube_quota_error(exc):
+                                    reason = str(exc)[:1000]
+                                    self.set_upload_receipt_state(
+                                        path, "youtube", self.upload_destination_id("youtube"),
+                                        publish_at.isoformat(), "Failed", error=reason
+                                    )
+                                    self.log(f"YouTube quota rejected {name}; no video ID was returned.")
                                     reset = next_pacific_midnight()
                                     retry_start = max(
                                         reset + timedelta(minutes=15),
@@ -2423,9 +3137,6 @@ class SchedulerApp:
                                         local_now() + timedelta(minutes=15),
                                     )
                                     retry_interval = validate_interval_minutes(self.interval_var.get() or 5)
-                                    # Rebuild all unaccepted YouTube slots after the quota reset.
-                                    # The allocator keeps accepted posts untouched and enforces
-                                    # the existing 100-slot Pacific-day cap for every later day.
                                     retry_rows = []
                                     for future_row in rows:
                                         retry_row = dict(future_row)
@@ -2436,43 +3147,53 @@ class SchedulerApp:
                                     retry_slots = allocate_youtube_publish_slots(
                                         retry_rows, retry_start, retry_interval, now=local_now()
                                     )
-                                    updated_slots = 0
                                     for retry_path, retry_slot in retry_slots.items():
                                         self.db_execute(
-                                            "UPDATE clips SET publish_at=? WHERE path=?",
+                                            "UPDATE clips SET publish_at=?, yt_status='Pending', yt_error=NULL WHERE path=?",
                                             (retry_slot, retry_path)
                                         )
                                         for future_row in rows:
                                             if future_row["path"] == retry_path:
                                                 future_row["publish_at"] = retry_slot
+                                                future_row["yt_status"] = "Pending"
                                                 break
-                                        updated_slots += 1
+                                        self.record_scheduled_upload(
+                                            retry_path, "youtube", self.upload_destination_id("youtube"), retry_slot
+                                        )
+                                    row["yt_status"] = "Pending"
                                     publish_at = datetime.fromisoformat(row["publish_at"]).astimezone()
                                     wait_seconds = max(30, (reset - local_now()).total_seconds())
                                     self.log(
-                                        f"YouTube daily upload quota reached. {updated_slots} unaccepted YouTube "
-                                        f"clips were moved to the next available quota windows, starting "
-                                        f"{retry_start.strftime('%Y-%m-%d %H:%M')} local time, using the selected "
-                                        f"{retry_interval}-minute interval and the 100-per-Pacific-day limit. "
-                                        f"Pausing until quota reset at {reset.strftime('%Y-%m-%d %H:%M')}."
+                                        f"YouTube daily quota reached. Remaining unaccepted clips were shifted "
+                                        f"into the next quota windows, beginning {retry_start.strftime('%Y-%m-%d %H:%M')} "
+                                        f"local time at {retry_interval}-minute intervals. Pausing until "
+                                        f"{reset.strftime('%Y-%m-%d %H:%M')}."
                                     )
                                     if self.stop_event.wait(wait_seconds):
                                         break
                                     continue
-                                retry_at = max(
-                                    publish_at + timedelta(days=1),
-                                    local_now() + timedelta(days=1, minutes=15),
+
+                                # An ambiguous network/server failure might happen after
+                                # the platform received the video. Keep a permanent Partial
+                                # receipt so Reset failed cannot trigger a duplicate upload.
+                                reason = str(exc)[:1200]
+                                status_code = getattr(getattr(exc, "resp", None), "status", None)
+                                definitive_rejection = (
+                                    isinstance(status_code, int) and 400 <= status_code < 500
+                                ) or "youtube authorization expired" in reason.lower()
+                                receipt_state = "Failed" if definitive_rejection else "Partial"
+                                self.set_upload_receipt_state(
+                                    path, "youtube", self.upload_destination_id("youtube"),
+                                    publish_at.isoformat(), receipt_state, error=reason
                                 )
-                                reason = str(exc)[:1100]
-                                self.db_execute(
-                                    "UPDATE clips SET yt_status='Error', yt_error=?, publish_at=? WHERE path=?",
-                                    (f"{reason} | Retry slot reserved for {retry_at.strftime('%Y-%m-%d %H:%M')}. "
-                                     "Reset failed and start the queue to retry.", retry_at.isoformat(), path)
-                                )
+                                row["yt_status"] = receipt_state
                                 self.log(
-                                    f"YouTube rejected {name}: {exc}. Its retry slot is reserved for "
-                                    f"{retry_at.strftime('%Y-%m-%d %H:%M')} local time tomorrow; "
-                                    "use Reset failed and start the queue to retry it."
+                                    f"YouTube {receipt_state.lower()} for {name}: {exc}. "
+                                    + (
+                                        "It can be retried using Reset failed."
+                                        if definitive_rejection else
+                                        "The remote result is uncertain; the app has locked this video against re-upload. Check YouTube Studio first."
+                                    )
                                 )
                                 break
 
@@ -2485,23 +3206,35 @@ class SchedulerApp:
                             break
                         page_id = str(page["id"])
                         job = self.get_fb_job(path, page_id)
-                        if not job or job["status"] in {"Scheduled", "Published"} or job["status"].startswith("Skipped"):
+                        if not job:
+                            continue
+                        job_status = str(job.get("status") or "Pending")
+                        if job_status in {"Scheduled", "Published", "Uploaded", "Uploading", "Partial"} or job_status.startswith("Skipped"):
+                            continue
+                        if job_status not in {"Pending", "Retryable"}:
                             continue
                         if row["fb_ok"] == 0:
                             self.db_execute(
                                 "UPDATE facebook_page_jobs SET status='Skipped (format)', error=? WHERE path=? AND page_id=?",
-                                ("Facebook Reel format pre-check failed (expected vertical 9:16, 4–60 seconds).", path, page_id)
+                                ("Facebook Reel format pre-check failed (expected vertical 9:16, 4-60 seconds).", path, page_id)
+                            )
+                            self.set_upload_receipt_state(
+                                path, "facebook", page_id, job["publish_at"], "Skipped",
+                                error="Facebook Reel format pre-check failed."
                             )
                             self.log(f"Facebook skipped for {page.get('name')}: {name} (format)")
                             continue
+                        if not Path(path).is_file():
+                            self.db_execute(
+                                "UPDATE facebook_page_jobs SET status='Failed', error=? WHERE path=? AND page_id=?",
+                                ("The MP4 file is missing; no upload request was sent.", path, page_id)
+                            )
+                            continue
                         try:
-                            if not self.wait_for_fb_api_slot(page_id, page.get("name") or page_id):
-                                break
-
+                            job = self.get_fb_job(path, page_id) or job
                             publish_at = datetime.fromisoformat(job["publish_at"]).astimezone()
-                            # Meta requires a scheduled publish time more than 10 minutes ahead.
-                            # If the queue was paused/restarted, move this and subsequent posts
-                            # forward rather than submitting an expired schedule time.
+                            # Keep a 15-minute API lead time without moving a new batch
+                            # behind an unrelated post already scheduled for a later time.
                             minimum_publish = local_now() + timedelta(minutes=15)
                             with self.db_lock:
                                 last_scheduled = self.conn.execute(
@@ -2511,58 +3244,92 @@ class SchedulerApp:
                                 ).fetchone()[0]
                             if last_scheduled:
                                 last_dt = datetime.fromisoformat(last_scheduled).astimezone()
-                                # A previously accepted post scheduled later than this
-                                # confirmed batch must not push the new batch forward.
-                                # Only preserve spacing when the latest accepted slot
-                                # actually precedes this clip's assigned publish time.
                                 if last_dt < publish_at:
-                                    minimum_publish = max(minimum_publish, last_dt + timedelta(
-                                        minutes=validate_interval_minutes(self.settings.get("interval", 5) or 5)
-                                    ))
+                                    minimum_publish = max(
+                                        minimum_publish,
+                                        last_dt + timedelta(
+                                            minutes=validate_interval_minutes(self.settings.get("interval", 5) or 5)
+                                        )
+                                    )
                             if publish_at < minimum_publish:
                                 publish_at = minimum_publish
+                                job["publish_at"] = publish_at.isoformat()
                                 self.db_execute(
                                     "UPDATE facebook_page_jobs SET publish_at=? WHERE path=? AND page_id=?",
                                     (publish_at.isoformat(), path, page_id)
                                 )
-                                self.log(
-                                    f"Adjusted Facebook schedule for {page.get('name')}: "
-                                    f"{name} → {publish_at.strftime('%Y-%m-%d %H:%M')}"
-                                )
+                                self.record_scheduled_upload(path, "facebook", page_id, publish_at.isoformat())
 
-                            self.log(f"Facebook Reel upload to {page.get('name')}: {name}")
+                            allowed, previous = self.claim_platform_upload(
+                                path, "facebook", page_id, publish_at.isoformat()
+                            )
+                            if not allowed:
+                                existing_status = (previous or {}).get("status", "Partial")
+                                self.log(
+                                    f"Facebook duplicate blocked for {name} on {page.get('name')}: "
+                                    f"an existing {existing_status} receipt already exists. No second upload was sent."
+                                )
+                                continue
+
+                            self.log(f"Facebook Reel upload started on {page.get('name')}: {name}")
                             video_id = self.upload_facebook_reel(
                                 path, title, description, publish_at, fb_ai,
-                                page_id=page_id, page_token=page["access_token"]
+                                page_id=page_id, page_token=page["access_token"],
+                                on_session=lambda value: self.set_upload_receipt_state(
+                                    path, "facebook", page_id, publish_at.isoformat(),
+                                    "Uploading", external_id=value
+                                ),
+                                on_uploaded=lambda value: self.set_upload_receipt_state(
+                                    path, "facebook", page_id, publish_at.isoformat(),
+                                    "Uploaded", external_id=value, uploaded=True
+                                )
                             )
                             accepted_at = local_now().isoformat()
+                            self.set_upload_receipt_state(
+                                path, "facebook", page_id, publish_at.isoformat(),
+                                "Scheduled", external_id=video_id
+                            )
                             self.db_execute(
-                                """UPDATE facebook_page_jobs
-                                SET status='Scheduled', video_id=?, error=NULL, submitted_at=?
-                                WHERE path=? AND page_id=?""",
-                                (video_id, accepted_at, path, page_id)
+                                "UPDATE facebook_page_jobs SET submitted_at=? WHERE path=? AND page_id=?",
+                                (accepted_at, path, page_id)
                             )
                             self.log(
-                                f"Facebook accepted on {page.get('name')}: {name} → "
-                                f"{publish_at.strftime('%Y-%m-%d %H:%M')}"
+                                f"Facebook accepted on {page.get('name')}: {name} -> "
+                                f"{publish_at.strftime('%Y-%m-%d %H:%M')} (video ID {video_id})"
                             )
                         except Exception as exc:
-                            retry_base = datetime.fromisoformat(job["publish_at"]).astimezone()
-                            retry_at = max(
-                                retry_base + timedelta(days=1),
-                                local_now() + timedelta(days=1, minutes=15),
+                            reason = str(exc)[:1200]
+                            receipt = self.get_platform_receipt(path, "facebook", page_id, publish_at.isoformat())
+                            has_remote_session = bool(receipt and receipt.get("external_id"))
+                            definitely_rejected = is_definitive_facebook_rejection(
+                                reason, has_remote_session=has_remote_session
                             )
-                            reason = str(exc)[:1100]
-                            self.db_execute(
-                                "UPDATE facebook_page_jobs SET status='Error', error=?, publish_at=? WHERE path=? AND page_id=?",
-                                (f"{reason} | Retry slot reserved for {retry_at.strftime('%Y-%m-%d %H:%M')}. "
-                                 "Reset failed and start the queue to retry.", retry_at.isoformat(), path, page_id)
+                            receipt_state = "Failed" if definitely_rejected else "Partial"
+                            self.set_upload_receipt_state(
+                                path, "facebook", page_id, publish_at.isoformat(),
+                                receipt_state, error=reason
                             )
-                            self.log(
-                                f"Facebook rejected {name} on {page.get('name')}: {exc}. "
-                                f"Its retry slot is reserved for {retry_at.strftime('%Y-%m-%d %H:%M')} "
-                                "local time tomorrow; use Reset failed and start the queue to retry it."
-                            )
+                            if definitely_rejected:
+                                retry_at = next_day_retry_time()
+                                self.db_execute(
+                                    "UPDATE facebook_page_jobs SET publish_at=? WHERE path=? AND page_id=?",
+                                    (retry_at.isoformat(), path, page_id)
+                                )
+                                self.record_scheduled_upload(
+                                    path, "facebook", page_id, retry_at.isoformat()
+                                )
+                                self.log(
+                                    f"Facebook rejected {name} on {page.get('name')}: {exc}. "
+                                    f"Retry slot moved to the next calendar day: "
+                                    f"{retry_at.strftime('%Y-%m-%d %H:%M')} local time. "
+                                    "Use Reset failed when ready to retry it."
+                                )
+                            else:
+                                self.log(
+                                    f"Facebook upload outcome is uncertain for {name} on {page.get('name')}: {exc}. "
+                                    "The original slot is retained and the Partial receipt blocks re-upload. "
+                                    "Check Meta Business Suite before taking action."
+                                )
 
                     self.update_fb_aggregate(path, selected_pages)
 
@@ -2593,60 +3360,38 @@ class SchedulerApp:
                 )
             )
 
-    def wait_for_fb_api_slot(self, page_id, page_name):
-        """Wait until this app has fewer than 30 accepted Reel scheduling requests in 24h."""
-        while not self.stop_event.is_set():
-            now = local_now()
-            cutoff = now - timedelta(hours=24)
-            with self.db_lock:
-                rows = self.conn.execute(
-                    "SELECT submitted_at FROM facebook_page_jobs "
-                    "WHERE page_id=? AND submitted_at IS NOT NULL",
-                    (str(page_id),)
-                ).fetchall()
-            recent = []
-            for row in rows:
-                try:
-                    submitted = datetime.fromisoformat(row["submitted_at"]).astimezone()
-                    if submitted > cutoff:
-                        recent.append(submitted)
-                except Exception:
-                    continue
-            if len(recent) < 30:
-                return True
-            oldest = min(recent)
-            resume_at = oldest + timedelta(hours=24, minutes=5)
-            wait_seconds = max(1, (resume_at - now).total_seconds())
-            self.log(
-                f"Meta's 30-Reels-per-24h limit reached for {page_name}. "
-                f"Pausing this Page until {resume_at.strftime('%Y-%m-%d %H:%M')} local time."
-            )
-            if self.stop_event.wait(wait_seconds):
-                return False
-        return False
-
     def update_fb_aggregate(self, path, selected_pages):
         statuses = []
+        jobs = []
         for page in selected_pages:
             job = self.get_fb_job(path, page["id"])
-            statuses.append(job["status"] if job else "Pending")
+            jobs.append(job)
+            statuses.append(str(job["status"] if job else "Pending").strip().lower())
         if not statuses:
             return
-        normalized = [str(status).strip().lower() for status in statuses]
-        if all(status == "published" for status in normalized):
+
+        normalized = statuses
+        if any(status in {"error", "failed"} or status.startswith("error") for status in normalized):
+            aggregate = "Failed"
+            errors = [
+                job.get("error") for job in jobs
+                if job and job.get("error")
+            ]
+            error = "; ".join(errors)[:1500] if errors else "One or more Page uploads failed."
+        elif any(status.startswith("skipped") for status in normalized):
+            aggregate, error = "Skipped", "One or more selected Pages skipped this clip due to format."
+        elif any(status in {"partial", "unknown", "duplicate blocked"} for status in normalized):
+            aggregate, error = "Partial", "One or more Page upload outcomes require manual verification."
+        elif any(status == "uploading" for status in normalized):
+            aggregate, error = "Uploading", None
+        elif all(status == "published" for status in normalized):
             aggregate, error = "Published", None
         elif all(status in {"scheduled", "published"} for status in normalized):
             aggregate, error = "Scheduled", None
-        elif any(status == "error" for status in normalized):
-            aggregate = "Error"
-            errors = [
-                self.get_fb_job(path, page["id"]).get("error")
-                for page in selected_pages
-                if self.get_fb_job(path, page["id"]) and self.get_fb_job(path, page["id"]).get("error")
-            ]
-            error = "; ".join(errors)[:1500] if errors else "One or more Page uploads failed."
-        elif any(status.startswith("Skipped") for status in statuses):
-            aggregate, error = "Skipped (format)", "One or more selected Pages skipped this clip due to format."
+        elif all(status == "uploaded" for status in normalized):
+            aggregate, error = "Uploaded", None
+        elif any(status in {"scheduled", "published", "uploaded"} for status in normalized):
+            aggregate, error = "Partial", "Some Pages have accepted uploads while other Page jobs remain pending."
         else:
             aggregate, error = "Pending", None
         self.db_execute(
@@ -2699,7 +3444,10 @@ class SchedulerApp:
             raise RuntimeError("YouTube returned no video ID after upload.")
         return response["id"]
 
-    def upload_facebook_reel(self, path, title, description, publish_at, is_ai, page_id=None, page_token=None):
+    def upload_facebook_reel(
+        self, path, title, description, publish_at, is_ai,
+        page_id=None, page_token=None, on_session=None, on_uploaded=None
+    ):
         token = page_token or self.secrets.get("fb_page_access_token", "")
         page_id = str(page_id or self.secrets.get("fb_page_id") or self.page_id_var.get().strip())
         if not token or not page_id:
@@ -2716,6 +3464,8 @@ class SchedulerApp:
         upload_url = started.get("upload_url")
         if not video_id or not upload_url:
             raise RuntimeError(f"Facebook did not return an upload session: {started}")
+        if on_session:
+            on_session(str(video_id))
 
         file_size = os.path.getsize(path)
         headers = {
@@ -2732,6 +3482,8 @@ class SchedulerApp:
         upload_data = upload_response.json() if upload_response.content else {}
         if upload_data and upload_data.get("success") is False:
             raise RuntimeError(f"Facebook binary upload failed: {upload_data}")
+        if on_uploaded:
+            on_uploaded(str(video_id))
 
         finish_data = {
             "access_token": token,
@@ -2765,7 +3517,10 @@ class SchedulerApp:
             message = error.get("message") or response.text[:1000] or f"HTTP {response.status_code}"
             code = error.get("code")
             subcode = error.get("error_subcode")
-            raise RuntimeError(f"Facebook Graph API error {code or ''}/{subcode or ''}: {message}")
+            raise RuntimeError(
+                f"Facebook Graph API error {code or ''}/{subcode or ''} "
+                f"(HTTP {response.status_code}): {message}"
+            )
 
     def on_close(self):
         if self.worker and self.worker.is_alive():
