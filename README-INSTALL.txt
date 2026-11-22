@@ -1,4 +1,4 @@
-ScarClipScheduler 2.0.4 — Windows installer
+ScarClipScheduler 2.0.5 — Windows installer
 ============================================
 
 1. Download and run ScarClipScheduler-Setup.exe.
@@ -23,7 +23,10 @@ WinGet is used to install Python 3.12 if no supported Python is found.
 The app uses a self-contained .NET 10 WPF executable. You do not need to
 install the .NET runtime separately. Python 3.11 or 3.12 (64-bit) is used by
 the separate local publishing worker. The installer opens the setup terminal
-so dependency checks and any automatic installation are visible.
+so dependency checks and any automatic installation are visible. If a check
+fails, Setup stops instead of reporting success. The terminal stays open until
+you press Enter, and the full diagnostic transcript is saved to:
+       %LOCALAPPDATA%\\ScarClipScheduler\\installer-setup.log
 
 UNINSTALL
 ---------
