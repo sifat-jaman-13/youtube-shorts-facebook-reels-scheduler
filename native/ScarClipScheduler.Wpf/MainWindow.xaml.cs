@@ -771,7 +771,7 @@ public partial class MainWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.3  |  Native Windows application",
+            Text = "Version 2.0.5  |  Native Windows application",
             FontSize = 12,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(154, 168, 196)),
             Margin = new Thickness(0, 0, 0, 14)
