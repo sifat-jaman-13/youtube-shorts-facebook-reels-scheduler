@@ -177,18 +177,6 @@ if (-not (Test-Path $pythonVenv)) {
         Refresh-ProcessPath
         $python = Get-PythonCommand
         if (-not $python) {
-            $knownPython = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'
-            if (Test-SupportedPython $knownPython) {
-                $versionResult = Invoke-CapturedProcess -FilePath $knownPython -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:2])))')
-                $python = [pscustomobject]@{
-                    File = $knownPython
-                    Prefix = @()
-                    Executable = $knownPython
-                    Version = $versionResult.StdOut.Trim()
-                }
-            }
-        }
-        if (-not $python) {
             throw 'WinGet reported Python 3.14 installation complete, but no compatible Python executable could be found. Check installer-setup.log and rerun setup.'
         }
     }
