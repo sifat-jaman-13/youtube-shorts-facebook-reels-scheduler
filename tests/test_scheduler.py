@@ -772,6 +772,11 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertNotIn("ScarClipScheduler-Windows-x64.zip", readme)
 
         self.assertIn("OutputBaseFilename=ScarClipScheduler-Setup", installer_definition)
+        self.assertIn("Uninstallable=yes", installer_definition)
+        self.assertIn("{group}\\\\Uninstall ScarClipScheduler", installer_definition)
+        self.assertIn('Filename: "{uninstallexe}"', installer_definition)
+        self.assertIn("## Uninstall", readme)
+        self.assertIn("Uninstall ScarClipScheduler", readme)
         self.assertIn("InitializeSetup", installer_definition)
         self.assertIn("waituntilterminated", installer_definition.lower())
         self.assertIn("WindowsPowerShell", installer_definition)
