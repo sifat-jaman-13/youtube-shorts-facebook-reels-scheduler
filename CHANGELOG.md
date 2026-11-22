@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.9] - 2026-11-22
+
+### Fixed
+
+- Styled native WPF category dropdown options with a dark background, readable light text, and distinct hover and selected states.
+- Adjusted the native window to fit within the available Windows desktop work area and center on startup, allowing smaller displays to show the full interface more reliably.
+
 ## [2.0.8] - 2026-11-22
 
 ### Fixed
