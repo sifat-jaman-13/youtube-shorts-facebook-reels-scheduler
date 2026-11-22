@@ -33,48 +33,82 @@ $requirements = Join-Path $install 'backend\requirements.txt'
 $dependencyMarker = Join-Path $install '.dependencies-version'
 $exe = Join-Path $install 'ScarClipScheduler.exe'
 
-function Test-SupportedPython([string]$Python, [string[]]$Prefix = @()) {
-    if (-not $Python) { return $false }
-    $commandArgs = @($Prefix) + @(
-        '-c',
-        "import sys; ok=(3,11) <= sys.version_info[:2] <= (3,12) and sys.maxsize > 2**32; raise SystemExit(0 if ok else 2)"
-    )
-    & $Python @commandArgs 2>$null
-    return ($LASTEXITCODE -eq 0)
+function Invoke-CapturedProcess([string]$FilePath, [string[]]$Arguments = @()) {
+    # Capture native exit codes without PowerShell 5.1 treating an expected
+    # missing-version result as a terminating error.
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $FilePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+    $quoted = foreach ($argument in $Arguments) {
+        if ($argument -notmatch '[\s"]') {
+            $argument
+        } else {
+            $escaped = $argument -replace '(\\*)"', '$1$1\"'
+            $escaped = $escaped -replace '(\\+)$', '$1$1'
+            '"' + $escaped + '"'
+        }
+    }
+    $startInfo.Arguments = ($quoted -join ' ')
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw "Could not start native process: $FilePath" }
+    $stdout = $process.StandardOutput.ReadToEndAsync()
+    $stderr = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout.Result; StdErr = $stderr.Result }
+}
+
+function Test-SupportedPython([string]$Python) {
+    if (-not $Python -or -not (Test-Path -LiteralPath $Python -PathType Leaf)) { return $false }
+    $checkCode = 'import sys; raise SystemExit(0 if (3,11) <= sys.version_info[:2] <= (3,12) and sys.maxsize > 2**32 else 2)'
+    try {
+        $result = Invoke-CapturedProcess -FilePath $Python -Arguments @('-c', $checkCode)
+        return ($result.ExitCode -eq 0)
+    } catch { return $false }
 }
 
 function Get-PythonCommand {
+    $candidatePaths = New-Object System.Collections.Generic.List[string]
+    # Use one successful launcher listing instead of probing an absent version
+    # with py -3.12, which can abort Windows PowerShell 5.1 under ErrorActionPreference=Stop.
     $launcher = Get-Command 'py.exe' -ErrorAction SilentlyContinue
     if ($launcher) {
-        foreach ($version in @('3.12', '3.11')) {
-            if (Test-SupportedPython $launcher.Source @("-$version")) {
-                $resolved = & $launcher.Source "-$version" -c 'import sys; print(sys.executable)'
-                if ($LASTEXITCODE -eq 0 -and $resolved) {
-                    return [pscustomobject]@{
-                        File = $launcher.Source
-                        Prefix = @("-$version")
-                        Executable = ([string]$resolved).Trim()
-                        Version = $version
+        try {
+            $listing = Invoke-CapturedProcess -FilePath $launcher.Source -Arguments @('-0p')
+            if ($listing.ExitCode -eq 0) {
+                foreach ($line in ($listing.StdOut -split [Environment]::NewLine)) {
+                    if ($line -match '^\s*-V:(?<version>3\.(?:12|11))(?:\s+\*)?\s+(?<path>.+?pythonw?\.exe)\s*$') {
+                        $candidatePaths.Add($Matches['path'].Trim())
                     }
                 }
             }
-        }
+        } catch { Write-Host "Python launcher listing was unavailable: $($_.Exception.Message)" -ForegroundColor Yellow }
     }
-
+    # Standard python.org locations and PATH are fallbacks if the launcher is unavailable.
+    $candidatePaths.Add((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'))
+    $candidatePaths.Add((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'))
+    $candidatePaths.Add((Join-Path $env:ProgramFiles 'Python312\python.exe'))
+    $candidatePaths.Add((Join-Path $env:ProgramFiles 'Python311\python.exe'))
+    $candidatePaths.Add('C:\Python312\python.exe')
+    $candidatePaths.Add('C:\Python311\python.exe')
     $pythonCommand = Get-Command 'python.exe' -ErrorAction SilentlyContinue
-    if ($pythonCommand -and (Test-SupportedPython $pythonCommand.Source)) {
-        $resolved = & $pythonCommand.Source -c 'import sys; print(sys.executable)'
-        $version = & $pythonCommand.Source -c 'import sys; print(".".join(map(str,sys.version_info[:2])))'
-        return [pscustomobject]@{
-            File = $pythonCommand.Source
-            Prefix = @()
-            Executable = ([string]$resolved).Trim()
-            Version = ([string]$version).Trim()
+    if ($pythonCommand) { $candidatePaths.Add($pythonCommand.Source) }
+    $seen = @{}
+    foreach ($candidate in $candidatePaths) {
+        if (-not $candidate) { continue }
+        $fullPath = [IO.Path]::GetFullPath($candidate)
+        if ($seen.ContainsKey($fullPath)) { continue }
+        $seen[$fullPath] = $true
+        if (Test-SupportedPython $fullPath) {
+            $versionResult = Invoke-CapturedProcess -FilePath $fullPath -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:2])))')
+            return [pscustomobject]@{ File = $fullPath; Prefix = @(); Executable = $fullPath; Version = $versionResult.StdOut.Trim() }
         }
     }
     return $null
 }
-
 function Refresh-ProcessPath {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
