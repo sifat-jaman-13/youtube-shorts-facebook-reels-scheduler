@@ -19,7 +19,7 @@ you open the app. If a compatible Python environment and matching packages
 are already present and healthy, setup reuses them and skips package installs.
 If Python or required packages are missing, setup attempts to install them.
 The installer does not require a particular Python install folder or version-specific launcher. It uses the normal `python` command resolved from the current Windows PATH.
-Setup checks `python --version` through the current Windows PATH. Any 64-bit CPython 3.10+ version is accepted, including Python 3.14 and newer. If the command is missing or unsupported, the visible setup terminal attempts to download and install Python 3.14 using WinGet, refreshes PATH, and verifies `python --version` again.
+Setup checks `python --version` through the current Windows PATH. Any 64-bit CPython 3.10+ version is accepted, including Python 3.14 and newer. If the command is missing or unsupported, the visible setup terminal attempts WinGet first. If WinGet is unavailable or its installation fails, setup downloads the newest stable 64-bit installer from python.org, verifies its Python Software Foundation digital signature, installs Python for the current Windows user, refreshes PATH, and verifies `python --version` again.
 
 The app uses a self-contained .NET 10 WPF executable. You do not need to
 install the .NET runtime separately. 64-bit CPython 3.10 or newer is used by
