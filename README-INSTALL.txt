@@ -30,7 +30,7 @@ UNINSTALL
 Open Start Menu → ScarClipScheduler → Uninstall ScarClipScheduler, or use
 Windows Settings → Apps → Installed apps → ScarClipScheduler → Uninstall.
 The uninstaller removes the installed program files and shortcuts. It keeps
-your user data under %LOCALAPPDATA%\\ScarClipScheduler.
+your user data under %LOCALAPPDATA%\ScarClipScheduler.
 
 DATA SAFETY
 -----------
