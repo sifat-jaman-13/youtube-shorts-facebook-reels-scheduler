@@ -53,6 +53,15 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        // Keep the complete native window inside the usable desktop area.
+        // The original fixed 1560x960 size clipped controls on smaller displays.
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(Width, Math.Max(900, workArea.Width - 32));
+        Height = Math.Min(Height, Math.Max(650, workArea.Height - 32));
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
         FooterStatus.Text = "Starting native interface and background publishing service...";
         ConnectionSummary.Text = "Starting publishing worker...";
         try
