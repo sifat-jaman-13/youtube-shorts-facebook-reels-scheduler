@@ -62,8 +62,9 @@ function Invoke-CapturedProcess([string]$FilePath, [string[]]$Arguments = @()) {
 }
 
 function Test-SupportedPython([string]$Python) {
-    if (-not $Python -or -not (Test-Path -LiteralPath $Python -PathType Leaf)) { return $false }
-    # 64-bit final CPython 3.10 or newer. There is intentionally no upper version cap.
+    if (-not $Python) { return $false }
+    # Validate the interpreter resolved by the active Windows PATH command.
+    # CPython 3.10+ (64-bit) is supported; there is no upper version limit.
     $checkCode = 'import sys; raise SystemExit(0 if sys.implementation.name == "cpython" and sys.version_info >= (3,10) and sys.version_info.releaselevel == "final" and sys.maxsize > 2**32 else 2)'
     try {
         $result = Invoke-CapturedProcess -FilePath $Python -Arguments @('-c', $checkCode)
@@ -72,78 +73,39 @@ function Test-SupportedPython([string]$Python) {
 }
 
 function Get-PythonCommand {
-    $candidatePaths = New-Object System.Collections.Generic.List[string]
-    # Enumerate every installed interpreter once. This works with py.exe even
-    # when one requested version (such as 3.12) is absent.
-    $launcher = Get-Command 'py.exe' -ErrorAction SilentlyContinue
-    if ($launcher) {
-        try {
-            $listing = Invoke-CapturedProcess -FilePath $launcher.Source -Arguments @('-0p')
-            if ($listing.ExitCode -eq 0) {
-                foreach ($line in ($listing.StdOut -split [Environment]::NewLine)) {
-                    if ($line -match '^\s*-V:(?<tag>\S+)(?:\s+\*)?\s+(?<path>.+?python\.exe)\s*$') {
-                        [void]$candidatePaths.Add($Matches['path'].Trim())
-                    }
-                }
-            } else {
-                Write-Host 'Python launcher could not list interpreters; checking standard install paths instead.' -ForegroundColor Yellow
-            }
-        } catch {
-            Write-Host "Python launcher listing was unavailable: $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-    }
-
-    # Fallback for python.org installs where the launcher is not present or
-    # its listing does not include the executable.
-    foreach ($minor in 15..10) {
-        $directoryName = 'Python3' + $minor
-        [void]$candidatePaths.Add((Join-Path $env:LOCALAPPDATA ('Programs\Python\' + $directoryName + '\python.exe')))
-        [void]$candidatePaths.Add((Join-Path $env:ProgramFiles ($directoryName + '\python.exe')))
-        [void]$candidatePaths.Add(('C:\' + $directoryName + '\python.exe'))
-    }
     $pythonCommand = Get-Command 'python.exe' -ErrorAction SilentlyContinue
-    if ($pythonCommand) { [void]$candidatePaths.Add($pythonCommand.Source) }
-
-    $seen = @{}
-    $validCandidates = New-Object System.Collections.ArrayList
-    foreach ($candidate in $candidatePaths) {
-        if (-not $candidate) { continue }
-        try { $fullPath = [IO.Path]::GetFullPath($candidate) } catch { continue }
-        if ($seen.ContainsKey($fullPath)) { continue }
-        $seen[$fullPath] = $true
-        if (-not (Test-SupportedPython $fullPath)) { continue }
-        $versionResult = Invoke-CapturedProcess -FilePath $fullPath -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:3])))')
-        if ($versionResult.ExitCode -ne 0) { continue }
-        try {
-            $runtimeVersion = [version]$versionResult.StdOut.Trim()
-            [void]$validCandidates.Add([pscustomobject]@{ Path = $fullPath; RuntimeVersion = $runtimeVersion })
-        } catch { continue }
+    if (-not $pythonCommand) {
+        Write-Host 'python --version: command not found on PATH.' -ForegroundColor Yellow
+        return $null
     }
 
-    $selected = $validCandidates | Sort-Object -Property RuntimeVersion -Descending | Select-Object -First 1
-    if ($selected) {
-        return [pscustomobject]@{
-            File = $selected.Path
-            Prefix = @()
-            Executable = $selected.Path
-            Version = $selected.RuntimeVersion.ToString(2)
-        }
+    $pythonExe = $pythonCommand.Source
+    try {
+        $versionCheck = Invoke-CapturedProcess -FilePath $pythonExe -Arguments @('--version')
+    } catch {
+        Write-Host "python --version could not run: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $null
     }
-    return $null
-}
+    $versionText = ($versionCheck.StdOut + $versionCheck.StdErr).Trim()
+    Write-Host "python --version -> $versionText" -ForegroundColor Gray
+    if ($versionCheck.ExitCode -ne 0) { return $null }
 
-function Write-ProcessOutput($Result) {
-    if ($Result.StdOut) { Write-Host $Result.StdOut.TrimEnd() }
-    if ($Result.StdErr) { Write-Host $Result.StdErr.TrimEnd() -ForegroundColor DarkGray }
-}
-
-function Invoke-SetupCommand([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage) {
-    $result = Invoke-CapturedProcess -FilePath $FilePath -Arguments $Arguments
-    Write-ProcessOutput $result
-    if ($result.ExitCode -ne 0) {
-        throw "$FailureMessage (exit code $($result.ExitCode)). $($result.StdErr.Trim())"
+    if (-not (Test-SupportedPython $pythonExe)) {
+        Write-Host 'The Python command on PATH is not a supported 64-bit CPython 3.10+ installation.' -ForegroundColor Yellow
+        return $null
     }
-    return $result
+
+    $details = Invoke-CapturedProcess -FilePath $pythonExe -Arguments @('-c', 'import sys; print(".".join(map(str,sys.version_info[:3]))); print(sys.executable)')
+    if ($details.ExitCode -ne 0) { return $null }
+    $lines = @($details.StdOut -split [Environment]::NewLine | Where-Object { $_.Trim() })
+    if ($lines.Count -lt 2) { return $null }
+    Write-Host "Using interpreter from PATH: $($lines[1].Trim())" -ForegroundColor Gray
+    return [pscustomobject]@{
+        File = $pythonExe
+        Prefix = @()
+        Executable = $lines[1].Trim()
+        Version = $lines[0].Trim()
+    }
 }
 function Refresh-ProcessPath {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -203,7 +165,7 @@ if (-not (Test-Path $pythonVenv)) {
         if (-not $winget) {
             Start-Process 'https://www.python.org/downloads/windows/'
             Start-Process 'https://apps.microsoft.com/detail/9NBLGGH4NNS1'
-            throw 'No compatible 64-bit Python 3.10+ runtime was found and WinGet is unavailable. Windows App Installer is required for automatic Python setup. Install/update App Installer, then rerun ScarClipScheduler Setup.'
+            throw 'The terminal could not find a compatible Python 3.10+ command on PATH, and WinGet is unavailable. Windows App Installer is required for automatic Python setup. Install/update App Installer, then rerun ScarClipScheduler Setup.'
         }
 
         Write-Host 'No compatible Python 3.10+ runtime was found. Downloading and installing Python 3.14 for the current Windows user...' -ForegroundColor Yellow
