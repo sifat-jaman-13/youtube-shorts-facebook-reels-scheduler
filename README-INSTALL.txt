@@ -1,4 +1,4 @@
-ScarClipScheduler 2.0.5 — Windows installer
+ScarClipScheduler 2.0.6 — Windows installer
 ============================================
 
 1. Download and run ScarClipScheduler-Setup.exe.
@@ -18,6 +18,7 @@ The dependency check runs during installation only. It is not run whenever
 you open the app. If a compatible Python environment and matching packages
 are already present and healthy, setup reuses them and skips package installs.
 If Python or required packages are missing, setup attempts to install them.
+The installer reads the launcher's installed-interpreter list and validates each Python executable directly. A missing Python 3.12 does not prevent it from selecting an installed Python 3.11.
 WinGet is used to install Python 3.12 if no supported Python is found.
 
 The app uses a self-contained .NET 10 WPF executable. You do not need to
