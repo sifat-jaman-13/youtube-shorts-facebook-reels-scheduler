@@ -821,6 +821,8 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn('<ControlTemplate TargetType="{x:Type ComboBox}">', native_ui)
         self.assertIn('Background="{Binding Background, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"', native_ui)
         self.assertIn('Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"', native_ui)
+        self.assertIn('TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"', native_ui)
+        self.assertIn('Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"', native_ui)
         self.assertIn('x:Name="PART_Popup"', native_ui)
         self.assertIn('<Path Data="M 0,0 L 4,4 L 8,0 Z"', native_ui)
 

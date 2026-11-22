@@ -109,6 +109,7 @@
                         <Grid SnapsToDevicePixels="True">
                             <ToggleButton x:Name="ToggleButton"
                                           Focusable="False"
+                                          Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
                                           ClickMode="Press"
                                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                                 <ToggleButton.Template>
@@ -123,6 +124,7 @@
                                                                   HorizontalAlignment="Left"
                                                                   VerticalAlignment="Center"
                                                                   IsHitTestVisible="False"
+                                                                  TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
                                                                   Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
                                                                   ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
                                                                   ContentStringFormat="{Binding SelectionBoxItemStringFormat, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"/>
@@ -301,7 +303,7 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="5,0,5,5">
                         <Separator Background="#293653" Margin="0,10"/>
                         <TextBlock Text="NATIVE WINDOWS UI" Foreground="#9AA8C4" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock Text=".NET 10 WPF | Version 2.0.10" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
+                        <TextBlock Text=".NET 10 WPF | Version 2.0.11" Foreground="#BFAAFF" FontSize="11" Margin="0,4,0,0"/>
                         <TextBlock Text="API worker runs separately." Foreground="#73829F" FontSize="10" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.11] - 2026-11-22
+
+### Fixed
+
+- Explicitly bind the closed YouTube category ComboBox selected-value presenter to the light application foreground, so its text remains white inside the dark field.
+- Explicitly pass the ComboBox foreground through its toggle control and added regression assertions for both bindings.
+
 ## [2.0.10] - 2026-11-22
 
 ### Fixed
