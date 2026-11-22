@@ -152,7 +152,7 @@ winget install --id Microsoft.DotNet.SDK.10 --exact --source winget --accept-pac
 
 git --version
 dotnet --info
-py -3.12 --version
+py -3 --version
 ```
 
 ## Install and run
