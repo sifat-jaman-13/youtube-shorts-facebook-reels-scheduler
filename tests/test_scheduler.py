@@ -797,7 +797,7 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertNotIn("Python311\\python.exe", installer_script)
         self.assertNotIn("Python312\\python.exe", installer_script)
         self.assertIn(".dependencies-version", installer_script)
-        self.assertIn("pip check", installer_script)
+        self.assertIn("'pip', 'check'", installer_script)
         self.assertIn("Skipping package installation", installer_script)
         self.assertIn("during installation", installer_script.lower())
         self.assertIn("ScarClipScheduler-Setup.exe", build_script)
