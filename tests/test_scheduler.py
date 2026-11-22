@@ -773,7 +773,7 @@ class SchedulerRegressionTests(unittest.TestCase):
 
         self.assertIn("OutputBaseFilename=ScarClipScheduler-Setup", installer_definition)
         self.assertIn("Uninstallable=yes", installer_definition)
-        self.assertIn("{group}\\\\Uninstall ScarClipScheduler", installer_definition)
+        self.assertIn(r'{group}\Uninstall ScarClipScheduler', installer_definition)
         self.assertIn('Filename: "{uninstallexe}"', installer_definition)
         self.assertIn("## Uninstall", readme)
         self.assertIn("Uninstall ScarClipScheduler", readme)
