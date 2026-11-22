@@ -6,6 +6,10 @@
 <p align="center">
   <img src="assets/scarclipscheduler-mini-banner.svg" alt="ScarClipScheduler compact banner" width="72%">
 </p>
+<p align="center">
+  <img src="assets/scarclipscheduler-logo.png" alt="ScarClipScheduler app icon" width="88">
+</p>
+<p align="center"><a href="assets/scarclipscheduler-social-card.svg">Open the 1200 × 630 social/share card</a></p>
 
 <p align="center">
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler?display_name=tag&sort=semver"></a>
