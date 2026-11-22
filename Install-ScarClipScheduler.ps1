@@ -73,7 +73,7 @@ function Test-SupportedPython([string]$Python) {
 }
 
 function Get-PythonCommand {
-    $pythonCommand = Get-Command 'python.exe' -ErrorAction SilentlyContinue
+    $pythonCommand = Get-Command 'python' -ErrorAction SilentlyContinue
     if (-not $pythonCommand) {
         Write-Host 'python --version: command not found on PATH.' -ForegroundColor Yellow
         return $null
