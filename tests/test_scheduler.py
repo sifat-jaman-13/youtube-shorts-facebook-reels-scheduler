@@ -721,7 +721,17 @@ class SchedulerRegressionTests(unittest.TestCase):
             self.assertEqual(finish_data["upload_phase"], "FINISH")
             self.assertEqual(finish_data["video_state"], "SCHEDULED")
             self.assertEqual(finish_data["scheduled_publish_time"], str(int(publish_at.timestamp())))
+            self.assertEqual(finish_data["title"], "Test title")
+            self.assertEqual(finish_data["description"], "Test title\n\nTest description")
             self.assertEqual(finish_data["is_ai_generated"], "true")
+
+    def test_facebook_reel_caption_puts_title_before_description(self):
+        self.assertEqual(
+            app.facebook_reel_caption("  My Reel Title  ", "  First line.\nSecond line.  "),
+            "My Reel Title\n\nFirst line.\nSecond line."
+        )
+        self.assertEqual(app.facebook_reel_caption("Only title", ""), "Only title")
+        self.assertEqual(app.facebook_reel_caption("", "Only description"), "Only description")
 
     def test_single_and_multi_selection_filter_the_schedule_scope(self):
         rows = [

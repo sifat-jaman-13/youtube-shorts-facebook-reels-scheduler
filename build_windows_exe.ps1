@@ -13,7 +13,7 @@ if (Test-Path $installerDir) {
 }
 New-Item -ItemType Directory -Force -Path $publish, $installerDir | Out-Null
 
-Write-Host 'Publishing ScarClipScheduler 2.0.15 (self-contained native WPF)...' -ForegroundColor Cyan
+Write-Host 'Publishing ScarClipScheduler 2.0.16 (self-contained native WPF)...' -ForegroundColor Cyan
 $arguments = @(
     'publish', $project,
     '-c', 'Release',

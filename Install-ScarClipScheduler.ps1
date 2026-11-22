@@ -145,7 +145,7 @@ function Refresh-ProcessPath {
 }
 
 Write-Host ''
-Write-Host 'ScarClipScheduler 2.0.15 - installation checks' -ForegroundColor Cyan
+Write-Host 'ScarClipScheduler 2.0.16 - installation checks' -ForegroundColor Cyan
 Write-Host 'This setup check runs during installation, not when you launch the app.' -ForegroundColor Gray
 Write-Host ''
 

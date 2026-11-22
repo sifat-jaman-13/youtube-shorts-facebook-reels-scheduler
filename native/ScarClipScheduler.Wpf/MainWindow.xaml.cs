@@ -42,7 +42,7 @@ public partial class MainWindow : Window
         var appIcon = Path.Combine(AppContext.BaseDirectory, "backend", "assets", "scarclipscheduler.ico");
         if (File.Exists(appIcon))
             Icon = BitmapFrame.Create(new Uri(appIcon, UriKind.Absolute));
-        Title = "ScarClipScheduler 2.0.15";
+        Title = "ScarClipScheduler 2.0.16";
         DataContext = this;
         ClipGrid.ItemsSource = Clips;
         StartDate.DisplayDateStart = DateTime.Today;
@@ -911,7 +911,7 @@ public partial class MainWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.15  |  Native Windows application",
+            Text = "Version 2.0.16  |  Native Windows application",
             FontSize = 12,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(154, 168, 196)),
             Margin = new Thickness(0, 0, 0, 14)

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.16] - 2026-11-22
+
+### Fixed
+
+- Facebook Reel captions now begin with the clip title, followed by a blank line and the full description. The title is still sent as separate Reel metadata.
+- Added regression coverage for the exact title/description values sent in the Facebook Reel FINISH request.
+
 ## [2.0.15] - 2026-11-22
 
 ### Added

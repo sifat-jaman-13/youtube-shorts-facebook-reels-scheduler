@@ -22,7 +22,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "ScarClipScheduler"
-APP_VERSION = "2.0.15"
+APP_VERSION = "2.0.16"
 MAX_INTERVAL_MINUTES = 24 * 60
 UPLOAD_PROTECTED_STATES = ("Uploading", "Partial", "Uploaded", "Scheduled", "Published", "Unknown", "Duplicate blocked")
 UPLOAD_RETRYABLE_STATES = ("Failed", "Retryable")
@@ -90,6 +90,15 @@ def clip_selection_summary(selected_count):
     if selected_count == 1:
         return "1 selected | one clip will be scheduled"
     return f"{selected_count} selected | batch scheduling"
+
+
+def facebook_reel_caption(title, description):
+    """Put the clip title first in the caption users actually see on a Reel."""
+    clean_title = str(title or "").strip()
+    clean_description = str(description or "").strip()
+    if clean_title and clean_description:
+        return f"{clean_title}\n\n{clean_description}"
+    return clean_title or clean_description
 
 
 def parse_txt(path):
@@ -3491,8 +3500,11 @@ class SchedulerApp:
             "upload_phase": "FINISH",
             "video_state": "SCHEDULED",
             "scheduled_publish_time": str(int(publish_at.timestamp())),
+            # Meta's Reel caption is the visible text users read under the Reel.
+            # Keep the separate title metadata, but lead the caption with that
+            # same title so the description is never the first/only visible text.
             "title": title[:100],
-            "description": description,
+            "description": facebook_reel_caption(title, description),
             "is_ai_generated": "true" if is_ai else "false",
         }
         finish_response = requests.post(

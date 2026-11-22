@@ -1,4 +1,4 @@
-ScarClipScheduler 2.0.15 â€” Windows installer
+ScarClipScheduler 2.0.16 â€” Windows installer
 ============================================
 
 1. Download and run ScarClipScheduler-Setup.exe.
