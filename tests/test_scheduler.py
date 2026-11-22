@@ -813,7 +813,7 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn("github.rest.repos.listReleaseAssets", release_workflow)
         self.assertIn("github.rest.repos.deleteReleaseAsset", release_workflow)
         self.assertIn("release.id === latestRelease.id", release_workflow)
-        self.assertIn("publishedReleases.sort", release_workflow)
+        self.assertIn(".sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))", release_workflow)
         self.assertNotIn("ScarClipScheduler-Windows-x64.zip", release_workflow)
         self.assertIn("ScarClipScheduler-Setup.exe", site)
         self.assertNotIn("ScarClipScheduler-Windows-x64.zip", site)
