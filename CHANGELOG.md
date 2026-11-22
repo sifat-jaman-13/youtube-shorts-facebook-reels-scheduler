@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.7] - 2026-11-22
+
+### Fixed
+
+- Replaced version-specific Python launcher probing with the normal `python --version` command resolved from the current Windows PATH.
+- Supports 64-bit CPython 3.10 and newer, without an upper version cap or hard-coded per-user Python installation paths.
+- When the PATH command is missing or unsupported, the visible setup terminal attempts to install Python 3.14 using WinGet, then repeats the PATH check before creating the worker environment.
+- Keeps Python dependency checks and repairs inside the install-only setup process; normal app launches do not reinstall dependencies.
+
 ## [2.0.6] - 2026-11-22
 
 ### Fixed
