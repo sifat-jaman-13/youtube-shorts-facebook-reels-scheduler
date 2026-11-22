@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.3] - 2026-11-22
+
+### Changed
+
+- Replaced the portable ZIP distribution with a standard single-file Windows setup executable.
+- Added an Inno Setup installer that runs the PowerShell prerequisite check visibly during installation.
+- The installer validates the existing Python 3.11 / 3.12 environment and dependency fingerprint, skips healthy matching installs, and installs or repairs missing / changed dependencies.
+- Added a safe installer guard that refuses updates or uninstall while ScarClipScheduler is running, protecting active publishing work.
+- Updated installation documentation, a navigable README contents section, and the single-banner README layout.
+
 ## [2.0.2] - 2026-11-22
 
 ### Changed

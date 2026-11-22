@@ -1,10 +1,10 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0B1020">
-<meta name="description" content="ScarClipScheduler 2.0.2 is a native Windows scheduler with a responsive clip queue, per-video metadata editing, and hour-and-minute scheduling for YouTube Shorts and Facebook Page Reels.">
-<meta property="og:title" content="ScarClipScheduler — Publish your clips with a plan">
+<meta name="description" content="ScarClipScheduler 2.0.3 is a native Windows scheduler with a responsive clip queue, per-video metadata editing, and hour-and-minute scheduling for YouTube Shorts and Facebook Page Reels.">
+<meta property="og:title" content="ScarClipScheduler â€” Publish your clips with a plan">
 <meta property="og:description" content="Review clips, edit post copy and schedule from one Windows desktop queue.">
 <meta property="og:image" content="https://raw.githubusercontent.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/main/assets/scarclipscheduler-social-card.svg">
 <meta property="og:image:type" content="image/svg+xml">
@@ -12,7 +12,7 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/main/assets/scarclipscheduler-social-card.svg">
-<title>ScarClipScheduler — Publish your clips with a plan</title>
+<title>ScarClipScheduler â€” Publish your clips with a plan</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
 :root{color-scheme:dark;--bg:#0B1020;--panel:#121A2D;--panel2:#1B2640;--fg:#F1F5FF;--muted:#9AA8C4;--line:rgba(169,149,255,.17);--teal:#A78BFA;--blue:#60A5FA;--max:1120px}
@@ -44,15 +44,15 @@ footer{padding:28px 0 40px;border-top:1px solid var(--line);color:#8498ae;font-s
 <body>
 <header><div class="wrap"><nav>
 <a class="brand" href="#"><img class="brand-icon" src="scarclipscheduler-logo.png" alt=""><span>ScarClipScheduler</span></a>
-<div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#setup">Setup</a><a href="#about">About</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">GitHub</a><a class="navcta" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip">Download v2.0.2</a></div>
+<div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#setup">Setup</a><a href="#about">About</a><a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">GitHub</a><a class="navcta" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Setup.exe">Download v2.0.3</a></div>
 </nav></div></header>
 <main>
 <div class="wrap hero"><img class="site-banner" src="../assets/scarclipscheduler-banner.svg" alt="ScarClipScheduler ? Schedule Shorts and Reels with control"><div class="hero-grid">
 <div>
-<div class="pill"><span class="dot"></span> Windows desktop app - v2.0.2</div>
+<div class="pill"><span class="dot"></span> Windows desktop app - v2.0.3</div>
 <h1>Publish your clips <span class="gradient">with a plan.</span></h1>
 <p class="lead">Review your MP4 queue, edit each video's title and description, choose the publishing destinations, and schedule YouTube Shorts and Facebook Page Reels from one native Windows app.</p>
-<div class="actions"><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip">Download for Windows</a><a class="btn secondary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Explore the project</a></div>
+<div class="actions"><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Setup.exe">Download for Windows</a><a class="btn secondary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler">Explore the project</a></div>
 <p class="fine">Windows 10/11 x64 - Native .NET 10 WPF - Python publishing worker</p>
 <div class="trust"><span><b>Selective scheduling</b></span><span><b>Per-clip metadata</b></span><span><b>Live queue tracking</b></span></div>
 </div>
@@ -81,16 +81,16 @@ footer{padding:28px 0 40px;border-top:1px solid var(--line);color:#8498ae;font-s
 
 <section id="setup"><div class="wrap"><div class="head"><div class="kicker">Getting started</div><h2>Set up once. Then manage your queue.</h2><p>The application uses your own Google and Meta authorization, stored locally in your Windows user profile.</p></div>
 <div class="setup">
-<article><h3>1. Install on Windows</h3><p>Download the Windows x64 ZIP, extract it, and run Install-ScarClipScheduler.ps1. Setup installs the native app, prepares the isolated Python worker environment, and creates a Start Menu shortcut.</p><ul><li>The WPF executable is self-contained for .NET 10.</li><li>Python 3.11 or newer is used by the publishing worker.</li><li>Internet is needed for first-time dependencies and platform API access.</li></ul></article>
+<article><h3>1. Install on Windows</h3><p>Download and run ScarClipScheduler-Setup.exe. The installer opens a PowerShell setup window, checks Python 3.11 / 3.12 and the publishing-worker packages, then attempts to install anything missing. If the matching environment is already healthy, it skips package installation. This setup check runs during installation only.</p><ul><li>The WPF executable is self-contained for .NET 10.</li><li>Python 3.11 or 3.12 (64-bit) is used by the publishing worker.</li><li>Internet is needed for first-time dependencies and platform API access.</li></ul></article>
 <article><h3>2. Connect YouTube</h3><p>Enable YouTube Data API v3 in Google Cloud, create an OAuth 2.0 Desktop application client, and choose the downloaded JSON file in Connections.</p><ul><li>An API key alone is not enough for uploads.</li><li>Sign in to the Google account that owns the channel.</li><li>Reconnect starts a fresh Google authorization.</li></ul></article>
 <article><h3>3. Connect Facebook</h3><p>Create a Meta developer app, configure the required Page permissions and localhost redirect URI, then enter the Meta App ID, App Secret and Business Portfolio ID.</p><ul><li>The connecting account needs access to the Pages.</li><li>Choose which connected Pages should receive Reels.</li><li>Reconnect starts the authorization flow again.</li></ul></article>
 <article><h3>4. Review the schedule</h3><p>Choose the local first-post time and posting interval. Scheduling submits videos now and records the time accepted by each platform.</p><ul><li>A platform-accepted schedule is not yet a public post.</li><li>Use Check publication to verify later.</li><li>Removing a local row does not cancel platform-side posts.</li></ul></article>
 </div></div></section>
 
-<section><div class="wrap"><div class="download"><div><div class="kicker">Native Windows application</div><h2 style="margin-bottom:0">ScarClipScheduler v2.0.2</h2><p>Responsive WPF interface, virtualized clip queue, hour/minute scheduling, connection controls, and a separate local publishing worker. No support-terminal window is required.</p></div><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip">Download Windows ZIP</a></div></div></section>
+<section><div class="wrap"><div class="download"><div><div class="kicker">Native Windows application</div><h2 style="margin-bottom:0">ScarClipScheduler v2.0.3</h2><p>Responsive WPF interface, virtualized clip queue, hour/minute scheduling, connection controls, and a separate local publishing worker. No support-terminal window is required during normal app use; the PowerShell setup window appears during installation to check and install missing dependencies.</p></div><a class="btn primary" href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Setup.exe">Download Windows installer</a></div></div></section>
 
 <section id="faq"><div class="wrap"><div class="head"><div class="kicker">Good to know</div><h2>Frequently asked questions.</h2></div><div class="faq">
-<details><summary>Does the app need a support terminal?</summary><p>No. The WPF interface starts the local Python publishing worker in the background. Scan, upload, schedule, verification and error messages appear in the in-app Activity log.</p></details>
+<details><summary>Does the app need a support terminal?</summary><p>No. The WPF interface starts the local Python publishing worker in the background. Scan, upload, schedule, verification and error messages appear in the in-app Activity log. A separate PowerShell window is shown during installation only, when prerequisites are checked or installed.</p></details>
 <details><summary>Does deleting a clip from the queue delete its MP4?</summary><p>No. Delete from list removes local queue records and Page-job tracking. It does not delete source MP4/TXT files or cancel schedules already accepted by YouTube or Meta.</p></details>
 <details><summary>Can I schedule just one video?</summary><p>Yes. Select one row for one video, or use Ctrl/Shift to select multiple clips. With no rows selected, scheduling applies to the full queue.</p></details>
 <details><summary>Does the app provide Google or Meta credentials?</summary><p>No. You create and authorize your own developer credentials. The app stores its tokens locally and never packages them in the public release.</p></details>

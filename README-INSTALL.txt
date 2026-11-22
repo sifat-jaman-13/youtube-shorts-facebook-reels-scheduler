@@ -1,30 +1,41 @@
-ScarClipScheduler 2.0.2 — Windows x64 setup
-===========================================
+ScarClipScheduler 2.0.3 — Windows installer
+============================================
 
-1. Extract the complete ZIP file to a normal folder.
-2. Right-click Install-ScarClipScheduler.ps1 and choose Run with PowerShell.
-   Alternatively, open PowerShell in the extracted folder and run:
-       powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-ScarClipScheduler.ps1
-3. The setup installs the app files under:
+1. Download and run ScarClipScheduler-Setup.exe.
+2. Follow the Windows installer. It places the self-contained native WPF app
+   under:
        %LOCALAPPDATA%\Programs\ScarClipScheduler
-   It prepares an isolated Python environment for the publishing worker,
-   installs its dependencies, creates a Start Menu shortcut, and can launch
-   the app when setup finishes.
-4. Open ScarClipScheduler from the Start Menu or its installed EXE.
+3. During installation, a PowerShell setup window opens. This is intentional:
+   it checks for a compatible Python runtime, creates the app's isolated
+   Python environment, verifies the publishing-worker dependencies, and
+   installs anything missing.
+4. When setup finishes, answer Y in that window to launch ScarClipScheduler,
+   or open it later from the Start Menu / desktop shortcut.
 
-The desktop interface is a native .NET 10 WPF application and includes the
-.NET runtime in its self-contained Windows build. Python 3.11+ is used only by
-the separate local publishing worker. Setup uses WinGet to install Python
-3.12 when a compatible Python installation is not found.
+DEPENDENCY CHECK BEHAVIOUR
+--------------------------
+The dependency check runs during installation only. It is not run whenever
+you open the app. If a compatible Python environment and matching packages
+are already present and healthy, setup reuses them and skips package installs.
+If Python or required packages are missing, setup attempts to install them.
+WinGet is used to install Python 3.12 if no supported Python is found.
 
-Your queue database, settings, OAuth tokens, Meta credentials, and logs remain
-under:
+The app uses a self-contained .NET 10 WPF executable. You do not need to
+install the .NET runtime separately. Python 3.11 or 3.12 (64-bit) is used by
+the separate local publishing worker. The installer opens the setup terminal
+so dependency checks and any automatic installation are visible.
+
+DATA SAFETY
+-----------
+Your queue database, scheduled-post IDs, settings, OAuth tokens, Meta
+credentials, and logs remain under:
        %LOCALAPPDATA%\ScarClipScheduler
 
-Updating the app replaces application files only. It does not delete or reset
-the user-data folder. Do not run two copies of ScarClipScheduler at once.
-Use Quit inside the app to shut it down cleanly.
+Updating the application replaces program files only. User data is stored
+outside the application directory and is preserved. The installer refuses
+to update or uninstall while ScarClipScheduler is running. Use Quit in the
+app and allow active publishing work to finish before installing an update.
 
-ScarClipScheduler uses official Google YouTube Data API and Meta Graph API
-authorization. You must supply your own credentials in the app. Keep OAuth
-files, tokens, Meta App Secrets, and local database backups private.
+ScarClipScheduler uses your own Google YouTube Data API and Meta Graph API
+authorization. Keep OAuth files, tokens, Meta App Secrets, and database
+backups private.

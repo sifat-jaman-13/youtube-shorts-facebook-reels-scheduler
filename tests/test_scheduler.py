@@ -753,5 +753,39 @@ class SchedulerRegressionTests(unittest.TestCase):
             self.assertEqual(row["description"], "The matching description is edited independently.")
             instance.conn.close()
 
+
+    def test_windows_installer_is_single_exe_and_dependency_setup_is_install_only(self):
+        project = Path(app.__file__).resolve().parent
+        readme = (project / "README.md").read_text(encoding="utf-8")
+        installer_script = (project / "Install-ScarClipScheduler.ps1").read_text(encoding="utf-8")
+        installer_definition = (project / "installer" / "ScarClipScheduler.iss").read_text(encoding="utf-8")
+        build_script = (project / "build_windows_exe.ps1").read_text(encoding="utf-8")
+        build_workflow = (project / ".github" / "workflows" / "build-exe.yml").read_text(encoding="utf-8")
+        release_workflow = (project / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        site = (project / "docs" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("ScarClipScheduler-Setup.exe", readme)
+        self.assertIn("## Navigation", readme)
+        self.assertIn("[Scheduling workflow](#scheduling-workflow)", readme)
+        self.assertEqual(readme.count('src="assets/scarclipscheduler-banner.svg"'), 1)
+        self.assertNotIn("scarclipscheduler-mini-banner.svg", readme)
+        self.assertNotIn("ScarClipScheduler-Windows-x64.zip", readme)
+
+        self.assertIn("OutputBaseFilename=ScarClipScheduler-Setup", installer_definition)
+        self.assertIn("InitializeSetup", installer_definition)
+        self.assertIn("waituntilterminated", installer_definition.lower())
+        self.assertIn("WindowsPowerShell", installer_definition)
+        self.assertIn(".dependencies-version", installer_script)
+        self.assertIn("pip check", installer_script)
+        self.assertIn("Skipping package installation", installer_script)
+        self.assertIn("during installation", installer_script.lower())
+        self.assertIn("ScarClipScheduler-Setup.exe", build_script)
+        self.assertNotIn("ScarClipScheduler-Windows-x64.zip", build_script)
+        self.assertIn("ScarClipScheduler-Setup.exe", build_workflow)
+        self.assertIn("ScarClipScheduler-Setup.exe", release_workflow)
+        self.assertNotIn("ScarClipScheduler-Windows-x64.zip", release_workflow)
+        self.assertIn("ScarClipScheduler-Setup.exe", site)
+        self.assertNotIn("ScarClipScheduler-Windows-x64.zip", site)
+
 if __name__ == "__main__":
     unittest.main()

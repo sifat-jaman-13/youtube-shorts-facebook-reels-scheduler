@@ -3,26 +3,42 @@
 <p align="center">
   <img src="assets/scarclipscheduler-banner.svg" alt="ScarClipScheduler — Schedule Shorts and Reels with control" width="100%">
 </p>
-<p align="center">
-  <img src="assets/scarclipscheduler-mini-banner.svg" alt="ScarClipScheduler compact banner" width="72%">
-</p>
-<p align="center">
-  <img src="assets/scarclipscheduler-logo.png" alt="ScarClipScheduler app icon" width="88">
-</p>
-<p align="center"><a href="assets/scarclipscheduler-social-card.svg">Open the 1200 × 630 social/share card</a></p>
+
 
 <p align="center">
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler?display_name=tag&sort=semver"></a>
-  <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Windows-x64.zip"><img alt="Windows x64 ZIP" src="https://img.shields.io/badge/download-Windows%20x64-2563eb?logo=windows"></a>
+  <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Setup.exe"><img alt="Windows installer" src="https://img.shields.io/badge/download-Windows%20installer-2563eb?logo=windows"></a>
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml"><img alt="Windows build" src="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.2 — Native Windows WPF desktop scheduler**
+**Version 2.0.3 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
 ScarClipScheduler manages a queue of MP4 clips and matching TXT metadata, then submits selected clips to YouTube Shorts and Facebook Page Reels using the official platform APIs.
+
+## Navigation
+
+- [Overview and features](#what-this-build-uses)
+- [Desktop app and background worker](#desktop-application-and-background-worker)
+- [Scheduling workflow](#scheduling-workflow)
+- [Platform connections](#connections)
+  - [YouTube](#youtube)
+  - [Facebook Page Reels](#facebook-page-reels)
+- [Clip folder and TXT metadata](#clip-folder-and-txt-format)
+- [Queue statuses and file handling](#queue-statuses-and-file-handling)
+- [Installation requirements](#before-you-install-windows)
+- [Install on Windows](#install-and-run)
+  - [New installation](#new-windows-installation-recommended)
+  - [Existing installation / update](#existing-windows-installation)
+  - [Run from source](#run-from-source)
+  - [Build the installer](#build-the-windows-installer)
+- [Data and security](#data-and-security)
+- [Tests](#tests)
+- [Project credits](#project-credits)
+- [License](#license)
+- [Changelog](CHANGELOG.md)
 
 ## What this build uses
 
@@ -107,69 +123,93 @@ The **Hide accepted** control hides fully scheduled/published items from the vis
 
 The app keeps separate local locations for scheduled, uploaded, pending and failed work. The **You can delete these clips now** folder is a manual-review area; the app does not automatically delete videos.
 
-## Absolute requirements before installing (Windows)
+## Before you install (Windows)
 
-> These are the real prerequisites for the published Windows ZIP. You do **not** need to install the .NET runtime separately.
+This checklist helps you prepare your PC before running setup. **It does not replace or disable the installer's own checks.** ScarClipScheduler-Setup.exe independently checks the required runtime during installation and attempts to install missing components through its visible PowerShell setup window.
 
-### Required for the Windows ZIP installer
+### Requirements for normal installation
 
 - **Operating system:** Windows 10 or Windows 11, 64-bit (x64).
-- **Internet connection:** required for first-time Python dependency installation and YouTube / Meta API communication.
-- **Python:** Python **3.11 or newer**, 64-bit, for the background publishing worker. Setup detects an existing compatible Python; if none is found, it uses WinGet to install Python 3.12.
-- **PowerShell:** included with Windows and used to run `Install-ScarClipScheduler.ps1`.
-- **WinGet / App Installer:** required only when setup needs to install Python automatically.
-- **.NET runtime:** **not required separately**. The distributed WPF application is published as a self-contained .NET 10 Windows x64 executable.
+- **Python:** 64-bit Python **3.11 or 3.12** for the local publishing worker. If neither is installed, setup attempts to install Python 3.12 with WinGet.
+- **WinGet / App Installer:** needed only when setup must install Python automatically. If Python is already installed, WinGet is not needed.
+- **Internet connection:** needed during first setup to install Python packages and later for Google / Meta API communication.
+- **PowerShell:** included with Windows; setup opens it to display prerequisite checks and any automatic installation.
+- **.NET:** no separate .NET runtime installation is required. The distributed WPF app is self-contained.
 - **FFmpeg:** not required by ScarClipScheduler.
 
 ### Official downloads
 
 | Requirement | Download |
 |---|---|
-| Python for Windows (64-bit) | [python.org — Windows downloads](https://www.python.org/downloads/windows/) |
+| Python 3.11 / 3.12 for Windows (64-bit) | [python.org — Windows downloads](https://www.python.org/downloads/windows/) |
 | WinGet / App Installer | [Microsoft Store — App Installer](https://apps.microsoft.com/detail/9NBLGGH4NNS1) |
-| .NET 10 SDK (developers building from source only) | [Microsoft — .NET 10 downloads](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) |
 | Git (source checkout only) | [git-scm.com — Windows](https://git-scm.com/download/win) |
+| .NET 10 SDK (developers building from source only) | [Microsoft — .NET 10 downloads](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) |
+| Inno Setup 6 (developers building the installer only) | [Inno Setup official download](https://jrsoftware.org/isdl.php) |
 
-### PowerShell: install the Windows worker prerequisite
+### Check / prepare Python before installation (optional)
 
-Run this only if you do not already have Python 3.11+ installed. It matches the package ID used by the setup script.
+You may run these commands before starting the installer. If Python 3.11 or 3.12 is already available, no manual installation is needed.
 
-```powershell
+~~~powershell
+# Check WinGet and installed Python versions
 winget --version
+py -0p
+
+# Optional: install Python 3.12 if you prefer to prepare it yourself
 winget install --id Python.Python.3.12 --exact --source winget --scope user --accept-package-agreements --accept-source-agreements
-py -3 --version
-```
 
-If `winget` is not recognized, install or update **App Installer** using the Microsoft Store link above, reopen PowerShell, and retry. Alternatively, install 64-bit Python manually from python.org and reopen PowerShell.
+# Verify a supported Python runtime
+py -3.12 --version
+# Or, when Python 3.11 is installed:
+py -3.11 --version
+~~~
 
-### Extra requirements only for developers
+If winget is not recognized and Python is missing, install or update **App Installer** from the Microsoft Store link above. Alternatively, install 64-bit Python 3.11 or 3.12 directly from python.org.
 
-If you are cloning, running, or building the source rather than installing the published ZIP, also install Git and the **.NET 10 SDK**. The .NET SDK is not a prerequisite for normal use of the published Windows ZIP.
+### Extra requirements for developers building from source
 
-```powershell
+These tools are **not required** to install or run the published setup EXE. They are only needed when you clone, build, or compile the application yourself.
+
+~~~powershell
+# Optional developer tools
 winget install --id Git.Git --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id Microsoft.DotNet.SDK.10 --exact --source winget --accept-package-agreements --accept-source-agreements
+winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 
+# Verify developer tools
 git --version
 dotnet --info
-py -3 --version
-```
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" /?
+~~~
+
+### What the installer checks automatically
+
+When you run **ScarClipScheduler-Setup.exe**, it opens a PowerShell setup window and:
+
+1. checks for Python 3.11 / 3.12 (64-bit);
+2. attempts to install Python 3.12 with WinGet if no supported version is found;
+3. creates or validates the app's isolated .venv;
+4. checks the installed dependency set against the packaged requirements.txt;
+5. installs or repairs packages only when the environment is new, incomplete, unhealthy, or the requirements have changed;
+6. asks whether to launch ScarClipScheduler when setup is complete.
+
+This process runs **during installation only**. Opening ScarClipScheduler later starts the native WPF app and its background worker; it does not open the setup terminal or reinstall Python packages.
 
 ## Install and run
 
 ### New Windows installation (recommended)
 
-Download **ScarClipScheduler-Windows-x64.zip** from the [latest GitHub release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest).
+Download **ScarClipScheduler-Setup.exe** from the [latest GitHub release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest).
 
-1. Extract the complete ZIP to a normal folder.
-2. Right-click **Install-ScarClipScheduler.ps1** and choose **Run with PowerShell**, or run:
-   ~~~powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\\Install-ScarClipScheduler.ps1
-   ~~~
-3. The setup copies the native app to **%LOCALAPPDATA%\\Programs\\ScarClipScheduler**, prepares an isolated Python environment for the publishing worker, installs its dependencies, and creates a Start Menu shortcut.
-4. Choose **Y** when asked to launch the app, or start ScarClipScheduler from the Start Menu.
+1. Double-click **ScarClipScheduler-Setup.exe**. Do not extract a ZIP.
+2. Follow the normal Windows installer prompts.
+3. During installation, the PowerShell setup window opens automatically. It checks the required Python runtime and publishing-worker packages, then attempts to install anything missing.
+4. When the setup window asks **Start ScarClipScheduler now?**, choose **Y** to launch it immediately. You can also start it later from the Start Menu or optional desktop shortcut.
 
-The desktop executable is a self-contained .NET 10 WPF application; a separate .NET runtime installation is not required. The existing publishing engine runs as a hidden local Python worker. Setup uses Python 3.11+ and installs Python 3.12 with WinGet if no compatible Python is available.
+The installer shows its dependency-check progress in PowerShell. If the required Python runtime and matching dependencies are already present and healthy, it reuses them and skips the package installation step. The dependency setup is not run when you open the app later.
+
+The desktop executable is a self-contained .NET 10 WPF application; a separate .NET runtime installation is not required. The Python publishing worker runs in the background without a support-terminal window during normal app use.
 
 ### Existing Windows installation
 
@@ -193,7 +233,7 @@ Requirements:
 
 - Windows 10/11 x64
 - .NET 10 SDK
-- Python 3.11 or newer
+- Python 3.11 or 3.12 (64-bit)
 - Internet access to install Python dependencies and use the platform APIs
 
 Clone the repository and run the batch launcher:
@@ -214,15 +254,16 @@ python -m pip install -r requirements.txt
 dotnet run --project .\\native\\ScarClipScheduler.Wpf\\ScarClipScheduler.Wpf.csproj
 ~~~
 
-### Build the Windows package
+### Build the Windows installer
 
-Run on Windows with the .NET 10 SDK:
+Run on Windows with the .NET 10 SDK and Inno Setup 6:
 
 ~~~powershell
-.\\build_windows_exe.ps1
+.\build_windows_exe.ps1
 ~~~
 
-The build creates **dist/ScarClipScheduler-Windows-x64.zip**. It contains the self-contained native WPF executable, backend worker source, application assets, and the PowerShell setup script. Python dependencies are installed on the target PC into an isolated .venv; account credentials and user data are never included in the package.
+The build creates **dist/installer/ScarClipScheduler-Setup.exe**. The single installer bundles the self-contained WPF application, Python publishing worker, dependency requirements, assets, and first-install PowerShell setup script. Credentials, queue data, and user settings are never included in the installer.
+
 
 ## Data and security
 
