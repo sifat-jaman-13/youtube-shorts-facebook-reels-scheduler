@@ -81,6 +81,16 @@ public sealed class BackendHost : IAsyncDisposable
             if (!root.TryGetProperty("ready", out var ready) || !ready.GetBoolean())
                 throw new InvalidOperationException("The publishing worker returned an invalid startup response.");
             var port = root.GetProperty("port").GetInt32();
+            var workerVersion = root.TryGetProperty("version", out var versionElement)
+                ? versionElement.GetString()
+                : null;
+            var desktopVersion = typeof(BackendHost).Assembly.GetName().Version?.ToString(3);
+            if (!string.Equals(workerVersion, desktopVersion, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Desktop version {desktopVersion ?? "unknown"} does not match publishing worker version {workerVersion ?? "unknown"}. " +
+                    "Close every ScarClipScheduler window and reinstall the same release before scheduling.");
+            }
             return new BackendHost(process, token, port);
         }
         catch
@@ -138,13 +148,11 @@ public sealed class ApiClient : IDisposable
         PropertyNameCaseInsensitive = true
     };
 
-    public ApiClient(Uri baseUri, string token)
+    public ApiClient(Uri baseUri, string token, HttpMessageHandler? handler = null)
     {
-        _http = new HttpClient
-        {
-            BaseAddress = baseUri,
-            Timeout = TimeSpan.FromSeconds(35)
-        };
+        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        _http.BaseAddress = baseUri;
+        _http.Timeout = TimeSpan.FromSeconds(35);
         _http.DefaultRequestHeaders.Add("X-Scar-Token", token);
     }
 
@@ -164,9 +172,29 @@ public sealed class ApiClient : IDisposable
         return value?.Events ?? [];
     }
 
-    public async Task<JsonDocument> PostAsync(string route, object body, CancellationToken cancellationToken = default)
+    public Task<JsonDocument> PostAsync(string route, object body, CancellationToken cancellationToken = default) =>
+        PostCoreAsync(route, body, false, cancellationToken);
+
+    // Only call after the desktop confirmation dialog has returned Yes.
+    // Approval is carried in both the JSON body and a dedicated local API header.
+    public Task<JsonDocument> PostConfirmedAsync(string route, object body, CancellationToken cancellationToken = default) =>
+        PostCoreAsync(route, body, true, cancellationToken);
+
+    private async Task<JsonDocument> PostCoreAsync(
+        string route,
+        object body,
+        bool nativeUserConfirmed,
+        CancellationToken cancellationToken)
     {
-        using var response = await _http.PostAsJsonAsync(route, body, JsonOptions, cancellationToken);
+        var json = JsonSerializer.Serialize(body, body.GetType(), JsonOptions);
+        using var request = new HttpRequestMessage(HttpMethod.Post, route)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        if (nativeUserConfirmed)
+            request.Headers.Add("X-Scar-User-Confirmed", "true");
+
+        using var response = await _http.SendAsync(request, cancellationToken);
         await EnsureSuccess(response, cancellationToken);
         return await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);

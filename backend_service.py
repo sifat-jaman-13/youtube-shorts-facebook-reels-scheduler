@@ -356,8 +356,8 @@ class NativeBackend(core.SchedulerApp):
         self.emit("state_changed")
 
     def start_queue(self, data):
-        if not data.get("confirmed"):
-            raise RuntimeError("The scheduling confirmation was not supplied by the desktop UI.")
+        if data.get("confirmed") is not True:
+            raise RuntimeError("Scheduling was not sent with an explicit desktop user confirmation.")
         if any(worker and worker.is_alive() for worker in (self.youtube_auth_worker, self.facebook_auth_worker)):
             raise RuntimeError("Wait for account authorization to finish before scheduling.")
         self.dialogs.confirm = True
@@ -601,6 +601,13 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return self._reply(413, {"error": "Request too large"})
             data = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
             route = urlparse(self.path).path
+            # The WPF client sends this only after the user accepts the
+            # scheduling confirmation dialog. Keep the JSON flag for compatibility.
+            if (
+                route == "/api/schedule"
+                and self.headers.get("X-Scar-User-Confirmed", "").strip().lower() == "true"
+            ):
+                data["confirmed"] = True
             handlers = {
                 "/api/settings": lambda data: (BACKEND.apply_settings(data) or {"saved": True}),
                 "/api/scan": BACKEND.start_scan,

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>2.0.12</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../native/ScarClipScheduler.Wpf/BackendClient.cs" Link="BackendClient.cs" />
+    <Compile Include="../../native/ScarClipScheduler.Wpf/Models.cs" Link="Models.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../backend_service.py" Link="backend/backend_service.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../app.py" Link="backend/app.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../assets/scarclipscheduler-logo.png" Link="backend/assets/scarclipscheduler-logo.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../assets/scarclipscheduler.ico" Link="backend/assets/scarclipscheduler.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -503,7 +503,7 @@ public partial class MainWindow : Window
                 return;
 
             settings["confirmed"] = true;
-            using var result = await RequireApi().PostAsync("api/schedule", settings);
+            using var result = await RequireApi().PostConfirmedAsync("api/schedule", settings);
             var started = result.RootElement.TryGetProperty("started", out var value) && value.GetBoolean();
             FooterStatus.Text = started ? "Publishing queue started." : "No pending destination work was started. Review the log.";
             await RefreshStateAsync();

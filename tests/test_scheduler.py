@@ -1,13 +1,17 @@
+import json
 import sqlite3
 import struct
 import tempfile
 import threading
 import unittest
+from http.server import ThreadingHTTPServer
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import app
 import backend_service
@@ -60,6 +64,12 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn('"/api/disconnect-facebook"', backend)
         self.assertIn("scheduled_posts_preserved", backend)
         self.assertIn("CreateNoWindow = true", client)
+        self.assertIn('PostConfirmedAsync("api/schedule", settings)', code)
+        self.assertIn("PostConfirmedAsync(", client)
+        self.assertIn('"X-Scar-User-Confirmed"', client)
+        self.assertIn('self.headers.get("X-Scar-User-Confirmed"', backend)
+        self.assertIn('if data.get("confirmed") is not True:', backend)
+        self.assertIn("Desktop version", client)
         self.assertIn("About_Click", xaml)
         self.assertNotIn("Support terminal", xaml)
         self.assertNotIn("SupportConsole_Click", code)
@@ -825,6 +835,75 @@ class SchedulerRegressionTests(unittest.TestCase):
         self.assertIn('Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"', native_ui)
         self.assertIn('x:Name="PART_Popup"', native_ui)
         self.assertIn('<Path Data="M 0,0 L 4,4 L 8,0 Z"', native_ui)
+
+
+
+class SchedulingConfirmationApiTests(unittest.TestCase):
+    """Exercise the real local HTTP handler without starting any uploads."""
+
+    def setUp(self):
+        self.backend = Mock()
+        self.backend.start_queue.side_effect = self._start_queue
+        self.backend_patch = patch.object(backend_service, "BACKEND", self.backend)
+        self.backend_patch.start()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), backend_service.ApiHandler)
+        self.server.api_token = "scheduler-api-contract-test-token"
+        self.server.daemon_threads = True
+        self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.server_thread.start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.server_thread.join(timeout=2)
+        self.backend_patch.stop()
+
+    def _start_queue(self, data):
+        if data.get("confirmed") is not True:
+            raise RuntimeError("Scheduling was not sent with an explicit desktop user confirmation.")
+        return {"started": True}
+
+    def _post(self, payload, confirmation_header=None):
+        request = Request(
+            f"http://127.0.0.1:{self.server.server_address[1]}/api/schedule",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Scar-Token": "scheduler-api-contract-test-token",
+            },
+            method="POST",
+        )
+        if confirmation_header is not None:
+            request.add_header("X-Scar-User-Confirmed", confirmation_header)
+        try:
+            with urlopen(request, timeout=3) as response:
+                return response.status, json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            status = error.code
+            body = error.read().decode("utf-8")
+            error.close()
+            return status, json.loads(body)
+
+    def test_native_confirmation_header_is_promoted_to_boolean_true(self):
+        status, payload = self._post({"confirmed": False}, "true")
+        self.assertEqual(status, 200)
+        self.assertIs(payload["started"], True)
+        sent_data = self.backend.start_queue.call_args.args[0]
+        self.assertIs(sent_data["confirmed"], True)
+
+    def test_missing_confirmation_is_rejected(self):
+        status, payload = self._post({})
+        self.assertEqual(status, 400)
+        self.assertIn("explicit desktop user confirmation", payload["error"])
+        self.backend.start_queue.assert_called_once()
+        self.assertNotIn("confirmed", self.backend.start_queue.call_args.args[0])
+
+    def test_legacy_json_confirmation_remains_supported(self):
+        status, payload = self._post({"confirmed": True})
+        self.assertEqual(status, 200)
+        self.assertIs(payload["started"], True)
+        sent_data = self.backend.start_queue.call_args.args[0]
+        self.assertIs(sent_data["confirmed"], True)
 
 if __name__ == "__main__":
     unittest.main()

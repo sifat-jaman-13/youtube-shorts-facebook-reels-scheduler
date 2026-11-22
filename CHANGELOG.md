@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.12] - 2026-11-22
+
+### Fixed
+
+- Send the native desktop user's scheduling approval through a dedicated local API header and the JSON request body.
+- Validate confirmation as a real boolean and keep requests without explicit approval rejected.
+- Verify the desktop executable and background worker versions match at startup, so stale/mixed installations fail with a clear version error.
+- Add HTTP integration tests for accepted, rejected, and legacy scheduling-confirmation requests, plus a .NET test of the production WPF API client.
+
 ## [2.0.11] - 2026-11-22
 
 ### Fixed
