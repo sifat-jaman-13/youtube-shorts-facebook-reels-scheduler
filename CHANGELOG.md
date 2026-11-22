@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.6] - 2026-11-22
+
+### Fixed
+
+- Fixed Python detection on Windows PowerShell 5.1: setup now reads the installed-interpreter list and validates executable paths directly instead of invoking a missing version such as `py -3.12` as a failing native command.
+- Python 3.11 is selected correctly when Python 3.12 is not installed.
+- Added a captured-process helper so optional runtime probes cannot abort the installer under `$ErrorActionPreference = 'Stop'`.
+
 ## [2.0.5] - 2026-11-22
 
 ### Fixed
