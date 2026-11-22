@@ -98,8 +98,8 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
-    PowerShellPath := ExpandConstant('{sys}\\WindowsPowerShell\\v1.0\\powershell.exe');
-    ScriptPath := ExpandConstant('{app}\\Install-ScarClipScheduler.ps1');
+    PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+    ScriptPath := ExpandConstant('{app}\Install-ScarClipScheduler.ps1');
     Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
     if not Exec(PowerShellPath, Parameters, ExpandConstant('{app}'),
       SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
@@ -110,7 +110,7 @@ begin
     begin
       RaiseException('ScarClipScheduler prerequisite setup failed (exit code ' +
         IntToStr(ResultCode) + '). Read the setup log at ' +
-        ExpandConstant('{localappdata}\\ScarClipScheduler\\installer-setup.log') +
+        ExpandConstant('{localappdata}\ScarClipScheduler\installer-setup.log') +
         ' and run the installer again after correcting the reported issue.');
     end;
   end;
