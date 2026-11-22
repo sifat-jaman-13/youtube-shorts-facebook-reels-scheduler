@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
 </p>
 
-**Version 2.0.3 — Native Windows WPF desktop scheduler**
+**Version 2.0.4 — Native Windows WPF desktop scheduler**
 
 [Website](https://sifat-jaman-13.github.io/youtube-shorts-facebook-reels-scheduler/) · [GitHub repository](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler) · [Latest release](https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest)
 
@@ -34,6 +34,7 @@ ScarClipScheduler manages a queue of MP4 clips and matching TXT metadata, then s
   - [Existing installation / update](#existing-windows-installation)
   - [Run from source](#run-from-source)
   - [Build the installer](#build-the-windows-installer)
+- [Uninstall](#uninstall)
 - [Data and security](#data-and-security)
 - [Tests](#tests)
 - [Project credits](#project-credits)
@@ -226,6 +227,10 @@ The queue database, scheduled-post IDs, settings, OAuth tokens, Meta credentials
 ~~~
 
 Updating the application replaces program files only. It does not delete the user-data folder or cancel posts already accepted by YouTube or Facebook. The installer refuses to replace files while ScarClipScheduler is running.
+
+## Uninstall
+
+Open **Start Menu → ScarClipScheduler → Uninstall ScarClipScheduler**, or use **Windows Settings → Apps → Installed apps → ScarClipScheduler → Uninstall**. The uninstaller removes the installed application files and shortcuts. It keeps your queue database, scheduled-post history, settings, OAuth tokens, Meta credentials, and logs in `%LOCALAPPDATA%\\ScarClipScheduler` so that a later reinstall can reuse them.
 
 ### Run from source
 
