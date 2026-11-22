@@ -161,23 +161,86 @@ if (Test-Path $pythonVenv) {
 if (-not (Test-Path $pythonVenv)) {
     $python = Get-PythonCommand
     if (-not $python) {
-        $winget = Get-Command 'winget.exe' -ErrorAction SilentlyContinue
-        if (-not $winget) {
-            Start-Process 'https://www.python.org/downloads/windows/'
-            Start-Process 'https://apps.microsoft.com/detail/9NBLGGH4NNS1'
-            throw 'The terminal could not find a compatible Python 3.10+ command on PATH, and WinGet is unavailable. Windows App Installer is required for automatic Python setup. Install/update App Installer, then rerun ScarClipScheduler Setup.'
+        Write-Host 'No compatible python command was found on PATH. Starting automatic Python installation...' -ForegroundColor Yellow
+        $winget = Get-Command 'winget' -ErrorAction SilentlyContinue
+
+        if ($winget) {
+            Write-Host 'Trying WinGet first: Python.Python.3.14...' -ForegroundColor Gray
+            $wingetArgs = @(
+                'install', '--id', 'Python.Python.3.14', '--exact', '--source', 'winget',
+                '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements'
+            )
+            try {
+                Invoke-SetupCommand -FilePath $winget.Source -Arguments $wingetArgs -FailureMessage 'WinGet could not install Python 3.14.' | Out-Null
+                Refresh-ProcessPath
+                $python = Get-PythonCommand
+            } catch {
+                Write-Host "WinGet installation did not complete: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host 'WinGet is not available. Falling back to the official Python.org installer...' -ForegroundColor Yellow
         }
 
-        Write-Host 'No compatible Python 3.10+ runtime was found. Downloading and installing Python 3.14 for the current Windows user...' -ForegroundColor Yellow
-        $wingetArgs = @(
-            'install', '--id', 'Python.Python.3.14', '--exact', '--source', 'winget',
-            '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements'
-        )
-        Invoke-SetupCommand -FilePath $winget.Source -Arguments $wingetArgs -FailureMessage 'WinGet could not install Python 3.14.' | Out-Null
-        Refresh-ProcessPath
-        $python = Get-PythonCommand
         if (-not $python) {
-            throw 'WinGet reported Python 3.14 installation complete, but no compatible Python executable could be found. Check installer-setup.log and rerun setup.'
+            # Discover the newest stable 64-bit CPython installer from the
+            # official Python downloads page. No user's Python install path
+            # or fixed Python patch version is assumed.
+            $previousProgressPreference = $ProgressPreference
+            $ProgressPreference = 'SilentlyContinue'
+            $pythonInstallerPath = $null
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                $downloadsPage = Invoke-WebRequest -UseBasicParsing -Uri 'https://www.python.org/downloads/windows/'
+                $releaseMatches = [regex]::Matches(
+                    $downloadsPage.Content,
+                    'https://www\.python\.org/ftp/python/(?<version>3\.\d+\.\d+)/python-[^""''\s]+-amd64\.exe',
+                    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+                )
+                $latestInstaller = $null
+                foreach ($match in $releaseMatches) {
+                    try {
+                        $candidateVersion = [version]$match.Groups['version'].Value
+                        if ($candidateVersion -ge [version]'3.10.0' -and
+                            (-not $latestInstaller -or $candidateVersion -gt $latestInstaller.Version)) {
+                            $latestInstaller = [pscustomobject]@{
+                                Version = $candidateVersion
+                                Url = $match.Value
+                            }
+                        }
+                    } catch { }
+                }
+                if (-not $latestInstaller) {
+                    throw 'The official Python downloads page did not expose a stable 64-bit installer for Python 3.10 or newer.'
+                }
+
+                $pythonInstallerPath = Join-Path $env:TEMP ("python-" + $latestInstaller.Version + "-amd64.exe")
+                Write-Host "Downloading official CPython $($latestInstaller.Version) for Windows x64..." -ForegroundColor Gray
+                Invoke-WebRequest -UseBasicParsing -Uri $latestInstaller.Url -OutFile $pythonInstallerPath
+
+                $signature = Get-AuthenticodeSignature -LiteralPath $pythonInstallerPath
+                if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
+                    $signature.SignerCertificate.Subject -notmatch 'Python Software Foundation') {
+                    throw 'The downloaded Python installer did not pass the Python Software Foundation digital-signature check.'
+                }
+
+                Write-Host 'Installing Python for the current Windows user and adding it to PATH...' -ForegroundColor Gray
+                $pythonInstall = Start-Process -FilePath $pythonInstallerPath -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_test=0' -Wait -PassThru
+                if ($pythonInstall.ExitCode -ne 0) {
+                    throw "The official Python installer exited with code $($pythonInstall.ExitCode)."
+                }
+            } finally {
+                $ProgressPreference = $previousProgressPreference
+                if ($pythonInstallerPath -and (Test-Path $pythonInstallerPath)) {
+                    Remove-Item -LiteralPath $pythonInstallerPath -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            Refresh-ProcessPath
+            $python = Get-PythonCommand
+        }
+
+        if (-not $python) {
+            throw 'Python installation finished or was attempted, but the terminal still cannot resolve a compatible 64-bit CPython 3.10+ command. Check installer-setup.log for details.'
         }
     }
 
@@ -189,7 +252,6 @@ if (-not (Test-Path $pythonVenv)) {
         throw 'Python returned success, but the isolated environment executable was not created.'
     }
 }
-
 # The installer verifies the venv and requirements fingerprint. It installs
 # packages only if this is a first setup, requirements changed, or a health
 # check fails. Normal app launches never execute this script.
