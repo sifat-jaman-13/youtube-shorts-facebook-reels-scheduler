@@ -38,7 +38,7 @@ public partial class MainWindow : Window
         var appIcon = Path.Combine(AppContext.BaseDirectory, "backend", "assets", "scarclipscheduler.ico");
         if (File.Exists(appIcon))
             Icon = BitmapFrame.Create(new Uri(appIcon, UriKind.Absolute));
-        Title = "ScarClipScheduler 2.0.4";
+        Title = "ScarClipScheduler 2.0.5";
         DataContext = this;
         ClipGrid.ItemsSource = Clips;
         StartDate.SelectedDate = DateTime.Today;
