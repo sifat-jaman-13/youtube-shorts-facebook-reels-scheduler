@@ -224,7 +224,7 @@ if (-not (Test-Path $pythonVenv)) {
                 }
 
                 Write-Host 'Installing Python for the current Windows user and adding it to PATH...' -ForegroundColor Gray
-                $pythonInstall = Start-Process -FilePath $pythonInstallerPath -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_test=0' -Wait -PassThru
+                $pythonInstall = Start-Process -FilePath $pythonInstallerPath -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=0 Include_test=0' -Wait -PassThru
                 if ($pythonInstall.ExitCode -ne 0) {
                     throw "The official Python installer exited with code $($pythonInstall.ExitCode)."
                 }
