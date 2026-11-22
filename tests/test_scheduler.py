@@ -875,12 +875,13 @@ class FutureScheduleValidationTests(unittest.TestCase):
 
     def test_queue_start_rejects_a_past_date_before_touching_settings(self):
         fake_backend = SimpleNamespace(youtube_auth_worker=None, facebook_auth_worker=None)
+        past_start = (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M")
         with self.assertRaisesRegex(ValueError, "later than the current local time"):
             backend_service.NativeBackend.start_queue(
                 fake_backend,
                 {
                     "confirmed": True,
-                    "start_at": "2026-11-22 16:14",
+                    "start_at": past_start,
                 },
             )
 
