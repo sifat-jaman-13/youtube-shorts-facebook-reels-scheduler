@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.5] - 2026-11-22
+
+### Fixed
+
+- Replaced the unchecked PowerShell post-install command with a checked installer step; Setup now stops when prerequisite configuration exits with an error.
+- Added a persistent setup transcript at `%LOCALAPPDATA%\\ScarClipScheduler\\installer-setup.log` and keeps the failed setup terminal open until the error has been read.
+- Reworded the Finish page so it confirms success directly and tells users where to launch the app.
+- Retained the Start Menu uninstaller shortcut introduced in 2.0.4.
+
 ## [2.0.4] - 2026-11-22
 
 ### Fixed
