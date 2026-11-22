@@ -223,14 +223,14 @@ The installed application and its virtual environment are stored under:
 The queue database, scheduled-post IDs, settings, OAuth tokens, Meta credentials and logs remain in:
 
 ~~~text
-%LOCALAPPDATA%\\ScarClipScheduler\\
+%LOCALAPPDATA%\ScarClipScheduler\\
 ~~~
 
 Updating the application replaces program files only. It does not delete the user-data folder or cancel posts already accepted by YouTube or Facebook. The installer refuses to replace files while ScarClipScheduler is running.
 
 ## Uninstall
 
-Open **Start Menu → ScarClipScheduler → Uninstall ScarClipScheduler**, or use **Windows Settings → Apps → Installed apps → ScarClipScheduler → Uninstall**. The uninstaller removes the installed application files and shortcuts. It keeps your queue database, scheduled-post history, settings, OAuth tokens, Meta credentials, and logs in `%LOCALAPPDATA%\\ScarClipScheduler` so that a later reinstall can reuse them.
+Open **Start Menu → ScarClipScheduler → Uninstall ScarClipScheduler**, or use **Windows Settings → Apps → Installed apps → ScarClipScheduler → Uninstall**. The uninstaller removes the installed application files and shortcuts. It keeps your queue database, scheduled-post history, settings, OAuth tokens, Meta credentials, and logs in `%LOCALAPPDATA%\ScarClipScheduler` so that a later reinstall can reuse them.
 
 ### Run from source
 
