@@ -9,7 +9,7 @@
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler?display_name=tag&sort=semver"></a>
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Setup.exe"><img alt="Windows installer" src="https://img.shields.io/badge/download-Windows%20installer-2563eb?logo=windows"></a>
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml"><img alt="Windows build" src="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="GPL-3.0-only License" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
+  <a href="LICENSE"><img alt="Custom Non-Commercial Licence" src="https://img.shields.io/badge/license-custom--non--commercial-orange"></a>
 </p>
 
 **Version 2.0.18 — Native Windows WPF desktop scheduler**
@@ -368,4 +368,4 @@ ScarClipScheduler integrates with the official YouTube Data API and Meta Graph A
 
 ## License
 
-ScarClipScheduler is open source under the **GNU General Public License v3.0 only (GPL-3.0-only)**. See the [LICENSE](LICENSE) file for the full terms.
+ScarClipScheduler is available under a **proprietary non-commercial use licence**. Individual personal and educational use is permitted; company, organisational, and commercial use requires prior written permission. See [LICENSE](LICENSE) for the full terms.
