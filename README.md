@@ -9,7 +9,7 @@
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler?display_name=tag&sort=semver"></a>
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/releases/latest/download/ScarClipScheduler-Setup.exe"><img alt="Windows installer" src="https://img.shields.io/badge/download-Windows%20installer-2563eb?logo=windows"></a>
   <a href="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml"><img alt="Windows build" src="https://github.com/sifat-jaman-13/youtube-shorts-facebook-reels-scheduler/actions/workflows/build-exe.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
+  <a href="LICENSE"><img alt="GPL-3.0-only License" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
 </p>
 
 **Version 2.0.18 — Native Windows WPF desktop scheduler**
@@ -53,7 +53,7 @@ ScarClipScheduler is a native Windows desktop app for preparing and scheduling s
 - **Flexible selection:** schedule one clip, several selected clips, or the entire queue.
 - **Metadata editor:** review and update each clip's title and description before publishing.
 - **Schedule controls:** set the first post date and time, then choose an interval in hours and minutes. Past dates and start times that are too close or already passed are rejected.
-- **Dedicated Scheduled view:** clips move out of Detected after all destinations selected for that run accept them. The Scheduled view keeps their platform IDs and accepted publish times.
+- **Separate Scheduled screen and dedicated Scheduled view:** clips move out of Detected after all destinations selected for that run accept them. The Scheduled view keeps their platform IDs and accepted publish times.
 - **Manual cleanup folder:** once every selected destination accepts the full upload and returns an external ID, the MP4/TXT pair is moved out of the watched folder into `You can delete this`. The **SAFE TO DELETE** button opens that folder; the app never permanently deletes the files.
 - **Protected history clearing:** clear visible Scheduled rows only after the app creates and verifies a SQLite backup. Permanent upload receipts and SHA-256 duplicate protection remain intact.
 - **Safe queue removal:** remove local queue entries without cancelling posts that a platform has already accepted.
@@ -368,4 +368,4 @@ ScarClipScheduler integrates with the official YouTube Data API and Meta Graph A
 
 ## License
 
-ScarClipScheduler is open source under the **MIT License**. See the [LICENSE](LICENSE) file for the full terms.
+ScarClipScheduler is open source under the **GNU General Public License v3.0 only (GPL-3.0-only)**. See the [LICENSE](LICENSE) file for the full terms.
